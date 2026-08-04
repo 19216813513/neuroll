@@ -1,0 +1,6 @@
+# Crawl protection is enforced by the X-Robots-Tag header (see public/_headers).
+# This file is the secondary layer. We deliberately do NOT use "Disallow: /",
+# because blocking the crawl prevents crawlers from ever reading the noindex
+# directive. Allowing the fetch is what lets noindex actually take effect.
+User-agent: *
+Allow: /

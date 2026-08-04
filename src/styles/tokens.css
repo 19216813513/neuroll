@@ -1,0 +1,67 @@
+/*
+ * Design tokens.
+ *
+ * Dark by default: sessions are long and the stimulus should be the brightest
+ * thing on screen, which a light background makes impossible.
+ *
+ * Note the absence of a web font. Loading one would risk a swap mid-session,
+ * and any reflow during a trial shifts the stimulus after it was timed.
+ * system-ui is already resident and never reflows.
+ */
+
+:root {
+  color-scheme: dark;
+
+  --bg: #0b0e14;
+  --bg-raised: #131822;
+  --bg-inset: #090c12;
+  --border: #212936;
+  --border-strong: #2f3a4d;
+
+  --text: #e4e9f2;
+  --text-dim: #97a1b5;
+  --text-faint: #5f6b80;
+
+  --accent: #4da3ff;
+  --accent-dim: #1f4d80;
+  --good: #4ade80;
+  --bad: #f87171;
+  --warn: #fbbf24;
+
+  --stimulus: #4da3ff;
+
+  --font: system-ui, -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", "Noto Sans JP",
+    sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Consolas", monospace;
+
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+
+  --radius: 8px;
+  --radius-lg: 12px;
+
+  --content-width: 880px;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #f7f8fa;
+  --bg-raised: #ffffff;
+  --bg-inset: #eef0f4;
+  --border: #dde1e8;
+  --border-strong: #c2c9d6;
+
+  --text: #12161f;
+  --text-dim: #58637a;
+  --text-faint: #8b95a8;
+
+  --accent: #1668c9;
+  --accent-dim: #b9d5f5;
+  --stimulus: #1668c9;
+}
