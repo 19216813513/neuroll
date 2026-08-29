@@ -298,6 +298,138 @@ table.data td.num {
   overflow-x: auto;
 }
 
+/* ---- n-back ---- */
+
+.nb-stage {
+  display: grid;
+  gap: var(--s-5);
+  justify-items: center;
+  width: min(560px, 92vw);
+  text-align: center;
+  padding: var(--s-4);
+  border-radius: var(--radius-lg);
+  border: 2px solid transparent;
+}
+
+.nb-stage.is-correct { border-color: var(--good); }
+.nb-stage.is-wrong { border-color: var(--bad); }
+
+.nb-counter {
+  font-family: var(--font-mono);
+  color: var(--text-faint);
+  font-size: 0.9rem;
+  min-height: 1.4em;
+}
+
+.nb-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--grid-size), 1fr);
+  gap: var(--s-2);
+  width: min(400px, 80vw);
+  aspect-ratio: 1;
+}
+
+.nb-cell {
+  border-radius: var(--radius);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  font-size: 1.8rem;
+  color: #05080f;
+  /* Only background-color changes on stimulus onset: no layout, no reflow, so
+     the paint lands on the next frame predictably. */
+  will-change: background-color;
+}
+
+.nb-cell.is-lit { border-color: transparent; }
+
+.nb-fixation {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  font-size: 1.4rem;
+  pointer-events: none;
+}
+
+.nb-keys {
+  display: flex;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.nb-key {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  padding: var(--s-2) var(--s-4);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+}
+
+.nb-key.is-pressed {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.nb-message { display: grid; gap: var(--s-2); }
+.nb-title { font-size: 1.8rem; font-family: var(--font-mono); }
+.nb-keyhint { color: var(--text-dim); }
+.nb-hint { color: var(--text-faint); font-size: 0.9rem; }
+
+/* ---- schulte ---- */
+
+.sc-stage {
+  display: grid;
+  gap: var(--s-4);
+  justify-items: center;
+  text-align: center;
+}
+
+.sc-next {
+  font-family: var(--font-mono);
+  font-size: 2.4rem;
+  color: var(--accent);
+  min-height: 1.2em;
+}
+
+.sc-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--sc-size), var(--sc-cell));
+  gap: var(--s-1);
+  /* The grid must not resize as cells are completed, or targets would move
+     under the pointer mid-search. */
+  justify-content: center;
+}
+
+.sc-cell {
+  width: var(--sc-cell);
+  height: var(--sc-cell);
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: calc(var(--sc-cell) * 0.38);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  /* Taps must register as taps, not as text selection or double-tap zoom. */
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.sc-cell.is-done { color: var(--text-faint); background: var(--bg-inset); }
+.sc-cell.is-wrong { border-color: var(--bad); color: var(--bad); }
+
+.sc-message { display: grid; gap: var(--s-2); }
+.sc-title { font-size: 1.4rem; }
+.sc-hint { color: var(--text-dim); font-size: 0.9rem; }
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation: none !important;
