@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "neuroll",
+  "compatibility_date": "2026-08-01",
+
+  // Static-assets-only Worker: there is no `main` script, so no Worker code runs
+  // and every request is served straight from the asset store. That matters for
+  // cost — asset requests are free and unlimited on all plans, while requests
+  // that invoke a Worker script count against the 100k/day free allowance.
+  //
+  // Cloudflare now steers new projects into Workers rather than Pages. For a
+  // static SPA the two are equivalent (both unmetered, both honour _headers),
+  // and Workers is the one that can later host the sync API from PLAN §9.5
+  // without a second deployment.
+  "assets": {
+    "directory": "./dist",
+    // Any unmatched path returns index.html instead of a 404, so a reload on a
+    // deep link keeps working once client-side routing exists.
+    "not_found_handling": "single-page-application"
+  },
+
+  "observability": {
+    "enabled": true
+  }
+}

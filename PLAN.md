@@ -76,28 +76,47 @@
 
 ### 2.2 結論と理由
 
-**Cloudflare Pages（静的配信）+ 将来必要なら Workers + D1。**
+**Cloudflare Workers（静的アセット配信）+ 将来必要なら同じ Worker に D1。**
+（当初は Pages を想定していたが、着手時点で Cloudflare の新規プロジェクトは Workers に一本化されていた。判断の詳細は §2.3.1）
 
 - 本アプリは**完全静的 SPA + ローカル保存（IndexedDB）** で成立するため、そもそもサーバー費用が発生しない。
 - その上で Cloudflare を選ぶ決め手:
   1. **帯域無制限** — Firebase Hosting の 360MB/日 は、PWA アセット + 音声ファイルを配ると意外に詰む。
   2. **無料枠を超えたら止まる（課金されない）** — AWS の従量課金と違い、寝ている間に請求が跳ねる事故が構造的に起きない。個人プロジェクトではこれが最重要。
   3. **拡張パスが同一プラットフォーム内で $0 のまま伸びる** — 後から端末間同期やランキングを足すとき、Workers + D1 が同じダッシュボード・同じ `wrangler` CLI で完結する。AWS/GCP だと同等構成で有料ラインに触れる。
-  4. 独自ドメイン不要なら `neuroll.pages.dev` が無料で付く。使うなら Cloudflare Registrar が原価提供（.com で年 $10 前後）。
+  4. 独自ドメイン不要なら `neuroll.<subdomain>.workers.dev` が無料で付く。使うなら Cloudflare Registrar が原価提供（.com で年 $10 前後）。
 
 **総コスト見積: 月 $0 / 年 $0（独自ドメインを使う場合のみ年 $10 程度）**
 
 ### 2.3 デプロイ構成
 
+> **2026-08-05 更新**: 実際に着手したところ、Cloudflare は新規プロジェクトを
+> **Pages ではなく Workers（静的アセット）** に誘導する UI に変わっていた。
+> 検証のうえ Workers を採用した。理由は §2.3.1。
+
 ```
 GitHub リポジトリ (main)
         │  push
         ▼
-Cloudflare Pages（自動ビルド: npm run build → dist/）
-        │
+Cloudflare Workers Builds（自動ビルド: npm run build → dist/）
+        │  npx wrangler deploy（設定は wrangler.jsonc）
         ▼
-   *.pages.dev  ← 全世界 CDN、無制限帯域
+   *.workers.dev  ← 全世界 CDN、静的アセットは無料・無制限
 ```
+
+#### 2.3.1 Pages ではなく Workers にした判断
+
+| 論点 | 結論 |
+|---|---|
+| コスト | **変わらない。** 静的アセットへのリクエストは Workers でも**無料・無制限**（Worker スクリプトを起動しない限り課金対象外）。§2.2 で Cloudflare を選んだ理由は失われない |
+| `_headers` | **Workers もネイティブ対応。** ローカル（`wrangler dev`）で 4 ヘッダーすべての適用を実測確認済み |
+| SPA フォールバック | `not_found_handling: "single-page-application"` で対応 |
+| 将来の同期 API | **Workers の方が有利。** §9.5 の同期を追加するとき、Pages なら別デプロイが必要だが Workers なら同じ Worker に同居できる |
+| Pages は使えないのか | 既存 Pages プロジェクトは引き続きサポートされるが、新規は Workers が推奨。ここで Workers にしておけば後の移行が不要 |
+
+設定は [`wrangler.jsonc`](wrangler.jsonc) に集約し、ダッシュボードで指定するのは
+プロジェクト名・ビルドコマンド・デプロイコマンドの 3 つだけにした。
+Node バージョンは `.nvmrc` でリポジトリ側に固定（環境変数の設定ミスを避けるため）。
 
 - プレビューデプロイ: PR ごとに一意 URL が自動発行される（無料）
 - ロールバック: ダッシュボードから過去ビルドにワンクリック
@@ -112,7 +131,7 @@ Cloudflare Pages（自動ビルド: npm run build → dist/）
 | 2 | `<meta name="robots" content="noindex, nofollow">` | HTML を読んだクローラのインデックス登録を拒否 |
 | 3 | **`public/_headers` で `X-Robots-Tag: noindex, nofollow`** | ← **これが本命**。HTTP ヘッダなので JS 実行前に効き、robots.txt 自体や JSON/アセットにも効く |
 | 4 | どこからもリンクを張らない | 被リンクが無ければ発見経路がほぼ無い |
-| 5 | プレビューデプロイも同様に保護 | `*.pages.dev` のプレビュー URL が漏れても同じヘッダが付く |
+| 5 | プレビューデプロイも同様に保護 | `*.workers.dev` のプレビュー URL が漏れても同じヘッダが付く |
 
 ```
 # public/_headers
@@ -938,7 +957,7 @@ neuroll/
 - 本アプリは**サーバーを一切使わない**（IndexedDB 完結）。ローカルと本番で挙動が変わる要素が無い
 - Vite の HMR は変更が 100ms 以内に反映される。デプロイを待つ理由がゼロ
 - タイミング計測の検証（フレーム落ち・長タスク）は**ローカルの DevTools でしかまともにできない**
-- Cloudflare Pages のビルド回数（500/月）を無駄に消費しない
+- Cloudflare のビルド回数を無駄に消費しない
 
 **それでも Day 1 にデプロイを通しておくべき理由**
 
@@ -948,7 +967,7 @@ neuroll/
 - スマホ実機での確認（タッチ入力・リフレッシュレート）に本番 URL が要る
 
 ```bash
-curl -sI https://neuroll.pages.dev | grep -i robots
+curl -sI https://neuroll.<subdomain>.workers.dev | grep -i robots
 ```
 
 **結論**: フェーズ 0 の初日に「Hello + `_headers`」だけデプロイして経路とヘッダを確認 →
@@ -956,7 +975,7 @@ curl -sI https://neuroll.pages.dev | grep -i robots
 
 ### フェーズ 0: 基盤（推定 3〜4 日）
 - git init + GitHub リポジトリ作成、Vite + TS + Preact + Biome セットアップ
-- **`public/_headers` + `robots.txt` を最初に置き、Cloudflare Pages にデプロイして
+- **`public/_headers` + `robots.txt` を最初に置き、Cloudflare にデプロイして
   `curl -I` で `X-Robots-Tag` を確認**（§2.4 / §14.0）
 - `core/rng.ts` — シード付き決定論的 PRNG（§9.4(a)。後から差し替えると過去データが再現不能になるので最初に確定させる）
 - `core/clock.ts` `core/scheduler.ts` `core/input.ts` — **提示時刻と入力時刻の精度検証をここで完了させる**
@@ -1042,7 +1061,7 @@ curl -sI https://neuroll.pages.dev | grep -i robots
 | 種目が増えるほどコードが肥大 | 保守不能 | `core`/`stats` の種目非依存を厳守。種目追加は 1 ディレクトリ + 1 行の登録のみ |
 | 設定項目が多すぎて使われない | 主要要件の空振り | プリセット 4 種を先頭に置き、詳細は折りたたみ。最終設定を必ず復元 |
 | バックグラウンドタブでのスロットリング | 不正なデータ混入 | `visibilitychange` で run を `valid: false` にし集計から除外 |
-| Cloudflare Pages のビルド上限（500回/月） | デプロイ不可 | 個人開発で月 500 プッシュは非現実的。到達しそうならローカルビルド + `wrangler pages deploy` に切替 |
+| Cloudflare Workers Builds のビルド上限 | デプロイ不可 | 個人開発で無料枠のビルド回数に到達するのは非現実的。到達しそうならローカルビルド + `npm run deploy` に切替 |
 
 ---
 
@@ -1050,7 +1069,7 @@ curl -sI https://neuroll.pages.dev | grep -i robots
 
 | 論点 | 決定 | 一言理由 |
 |---|---|---|
-| クラウド | **Cloudflare Pages** | 帯域無制限・超過で停止（課金されない）・拡張パスが同一無料枠内 |
+| クラウド | **Cloudflare Workers（静的アセット）** | 静的アセットは無料・無制限、超過で停止（課金されない）、同期 API を後から同居させられる（§2.3.1） |
 | バックエンド | **MVP はなし（ローカル完結）** | サーバー不要で $0 と最速起動。ただしデータの形は将来のサーバーに合わせておく |
 | 公開範囲 | **公開 URL + `X-Robots-Tag: noindex`** | クロール対策の本命は HTTP ヘッダ。robots.txt は補助 |
 | 認証 | **MVP はなし。必要になったら Cloudflare Access → 自前 SSO の2段階** | 段階1はコード変更ゼロで Google ログイン化できる |
@@ -1077,29 +1096,31 @@ curl -sI https://neuroll.pages.dev | grep -i robots
 | # | 項目 | 備考 |
 |---|---|---|
 | 1 | **Node.js LTS（22.x 以降）** | `node -v` で確認。未導入なら [nodejs.org](https://nodejs.org/) から |
-| 2 | **GitHub アカウントと空のリポジトリ** | 名前は `neuroll` 想定。**Private で問題ない**（Cloudflare Pages は Private リポジトリも無料で連携可） |
+| 2 | **GitHub アカウントと空のリポジトリ** | ✅ 完了: `19216813513/neuroll`。**Private で問題ない**（Cloudflare は Private リポジトリも無料で連携可） |
 | 3 | **Cloudflare アカウント** | 無料。クレジットカード登録**不要**（Workers 無料枠のみ使う限り） |
 
 ### 18.2 Cloudflare 側の設定（ダッシュボードで 5 分）
 
-1. Cloudflare ダッシュボード → **Workers & Pages** → **Create** → **Pages** → **Connect to Git**
-2. GitHub を認可し、`neuroll` リポジトリを選択
-3. ビルド設定:
-   - Framework preset: **None**（Vite を手動指定する方が確実）
-   - Build command: `npm run build`
-   - Build output directory: `dist`
-   - Node version: 環境変数 `NODE_VERSION` = `22`
-4. デプロイ → `https://neuroll.pages.dev` が発行される
+1. Cloudflare ダッシュボード → **Workers & Pages** → **Create**
+2. GitHub を認可し、`19216813513/neuroll` リポジトリを選択
+3. セットアップ画面で 3 項目のみ入力:
+   - プロジェクト名: `neuroll`
+   - ビルドコマンド: `npm run build`
+   - デプロイコマンド: `npx wrangler deploy`
+4. **Protect with Cloudflare Access はオフのまま**（§2.5 の段階1。必要になったら後でオンにする）
+5. デプロイ → `https://neuroll.<subdomain>.workers.dev` が発行される
 
-> **CLI 派の場合**: `npm i -D wrangler` → `npx wrangler login`（ブラウザで認可）→
-> `npx wrangler pages deploy dist`。API トークンの手動発行は不要。
-> GitHub 連携と CLI は併用できるので、まず GitHub 連携で作っておくのを推奨。
+出力ディレクトリと SPA フォールバックは [`wrangler.jsonc`](wrangler.jsonc)、
+Node バージョンは `.nvmrc` に入っているので、ダッシュボードでの指定は不要。
+
+> **CLI 派の場合**: `npx wrangler login`（ブラウザで認可）→ `npm run deploy`。
+> API トークンの手動発行は不要。GitHub 連携と CLI は併用できる。
 
 ### 18.3 任意（後からいつでも追加できる）
 
 | 項目 | いつ必要か | 費用 |
 |---|---|---|
-| 独自ドメイン | `*.pages.dev` が嫌になったら | Cloudflare Registrar で原価。`.com` 年 $10 前後 |
+| 独自ドメイン | `*.workers.dev` が嫌になったら | Cloudflare Registrar で原価。`.com` 年 $10 前後 |
 | **Cloudflare Access（Google ログインで全体を保護）** | 「自分だけが使える状態」にしたくなったら | **無料（〜50ユーザー）**。ダッシュボードのみ、コード変更ゼロ |
 | Google Cloud Console の OAuth クライアント ID | フェーズ 3a 段階2（自前 SSO）に進むとき | 無料 |
 | D1 データベース | 端末間同期を始めるとき | 無料枠内 |
@@ -1109,11 +1130,17 @@ curl -sI https://neuroll.pages.dev | grep -i robots
 フェーズ 0 の初日、Hello ページをデプロイしたら必ずこれを実行する。
 
 ```bash
-curl -sI https://neuroll.pages.dev | grep -i -E "x-robots-tag|referrer-policy"
+curl -sI https://neuroll.<subdomain>.workers.dev | grep -i -E "x-robots-tag|referrer-policy"
 ```
 
-`X-Robots-Tag: noindex, nofollow, noarchive` が返れば、クロール対策が効いている。
+`X-Robots-Tag: noindex, nofollow, noarchive, nosnippet` が返れば、クロール対策が効いている。
 **返らなければ `public/_headers` が `dist/` にコピーされていない** ので、そこを直す。
+
+なお、この確認はデプロイ前にローカルでも可能（実際にそうして検証済み）:
+
+```bash
+npm run build && npx wrangler dev --port 8788 --local
+```
 
 ---
 

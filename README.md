@@ -21,14 +21,22 @@ npm run dev
 
 ## デプロイ
 
-GitHub 連携（推奨）の場合、Cloudflare Pages 側の設定:
+**Cloudflare Workers**（静的アセット）にデプロイする。Pages ではない。
+
+Cloudflare は新規プロジェクトを Workers に誘導しており、静的 SPA では両者は等価
+（どちらも帯域無制限、どちらも `_headers` を解釈する）。Workers を選ぶ理由は、
+将来 PLAN §9.5 の同期 API を**同じデプロイに同居させられる**こと。
+
+設定は [`wrangler.jsonc`](wrangler.jsonc) に入っているので、ダッシュボード側で
+指定するのは次の3つだけ:
 
 | 項目 | 値 |
 |---|---|
-| Framework preset | None |
-| Build command | `npm run build` |
-| Build output directory | `dist` |
-| 環境変数 | `NODE_VERSION` = `22` |
+| プロジェクト名 | `neuroll` |
+| ビルドコマンド | `npm run build` |
+| デプロイコマンド | `npx wrangler deploy` |
+
+Node のバージョンは [`.nvmrc`](.nvmrc) で固定しているので、環境変数の設定は不要。
 
 CLI から直接デプロイする場合:
 
@@ -40,16 +48,25 @@ npx wrangler login
 npm run deploy
 ```
 
+ローカルで本番相当の配信を確認する場合（`_headers` の検証はこれで足りる）:
+
+```bash
+npm run build && npx wrangler dev --port 8788 --local
+```
+
 ### デプロイ後に必ず確認すること
 
 クロール対策が効いているかは、ヘッダを見ないと分からない。
 
 ```bash
-curl -sI https://neuroll.pages.dev | grep -i x-robots-tag
+curl -sI https://neuroll.<subdomain>.workers.dev | grep -i x-robots-tag
 ```
 
 `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet` が返れば正常。
 返らない場合は `public/_headers` が `dist/` にコピーされていない。
+
+`_headers` は配信されず Workers にパースされるだけなので、`/_headers` に
+アクセスすると（SPA フォールバックで）index.html が返る。これが正しい挙動。
 
 ## 構成
 
