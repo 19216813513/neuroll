@@ -12,12 +12,14 @@ import type { Config, ExerciseDef } from "~/exercises/types";
 import { withDefaults } from "~/exercises/types";
 import { loadConfig, saveConfig } from "~/store/settings";
 import type { Run } from "~/store/types";
+import { ExerciseSetup } from "./ExerciseSetup";
 import { Home } from "./Home";
 import { Results } from "./Results";
 import { Session } from "./Session";
 
 type Screen =
   | { name: "home" }
+  | { name: "setup"; def: ExerciseDef; config: Config }
   | { name: "session"; def: ExerciseDef; config: Config }
   | { name: "results"; def: ExerciseDef; config: Config; run: Run };
 
@@ -31,12 +33,18 @@ export function App() {
     void measureDeviceProfile().then(setDeviceProfile);
   }, []);
 
+  /** Straight into a session with the last-used config. */
   const startExercise = useCallback(async (def: ExerciseDef) => {
     // Restore the last-used config so retry never routes through a settings
     // screen (PLAN §8.1).
     const stored = await loadConfig(def.id);
-    const config = withDefaults(def, stored);
-    setScreen({ name: "session", def, config });
+    setScreen({ name: "session", def, config: withDefaults(def, stored) });
+  }, []);
+
+  /** Via the setup screen, to read the rules or change something first. */
+  const configureExercise = useCallback(async (def: ExerciseDef) => {
+    const stored = await loadConfig(def.id);
+    setScreen({ name: "setup", def, config: withDefaults(def, stored) });
   }, []);
 
   const handleFinish = useCallback(({ run }: { run: Run }) => {
@@ -58,6 +66,28 @@ export function App() {
 
   const goHome = useCallback(() => setScreen({ name: "home" }), []);
 
+  const reconfigure = useCallback(() => {
+    setScreen((current) =>
+      current.name === "results"
+        ? { name: "setup", def: current.def, config: current.config }
+        : current,
+    );
+  }, []);
+
+  if (screen.name === "setup") {
+    return (
+      <ExerciseSetup
+        def={screen.def}
+        config={screen.config}
+        onStart={(config) => {
+          void saveConfig(screen.def.id, config);
+          setScreen({ name: "session", def: screen.def, config });
+        }}
+        onBack={goHome}
+      />
+    );
+  }
+
   if (screen.name === "session") {
     if (!deviceProfile) return <div class="app-shell muted">環境を計測中…</div>;
     return (
@@ -75,8 +105,22 @@ export function App() {
   }
 
   if (screen.name === "results") {
-    return <Results def={screen.def} run={screen.run} onRetry={retry} onHome={goHome} />;
+    return (
+      <Results
+        def={screen.def}
+        run={screen.run}
+        onRetry={retry}
+        onHome={goHome}
+        onReconfigure={reconfigure}
+      />
+    );
   }
 
-  return <Home deviceProfile={deviceProfile} onStart={(def) => void startExercise(def)} />;
+  return (
+    <Home
+      deviceProfile={deviceProfile}
+      onStart={(def) => void startExercise(def)}
+      onConfigure={(def) => void configureExercise(def)}
+    />
+  );
 }

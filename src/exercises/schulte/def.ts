@@ -26,6 +26,23 @@ export const schulteDef: ExerciseDef = {
   id: "schulte",
   name: "数字探し",
   blurb: "格子状の数字を順にタップ。視覚探索と周辺視を鍛える。",
+  instructions: [
+    "バラバラに並んだ数字を、順番どおりにできるだけ速くクリックします。",
+    "次に押すべき数字は、グリッドの上に大きく表示されます。",
+    "押し間違えても先には進みません。誤タップはペナルティとして時間が加算されます。",
+    "速さを競うので、当てずっぽうで連打すると逆に遅くなります。",
+    "慣れてきたら中央付近を見たまま、周辺視で数字を探すと速くなります。",
+  ],
+  presets: [
+    { name: "入門", note: "3×3 昇順", config: { size: 3, order: "asc" } },
+    { name: "標準", note: "5×5 昇順", config: { size: 5, order: "asc" } },
+    { name: "広い視野", note: "7×7 昇順", config: { size: 7, order: "asc" } },
+    {
+      name: "高負荷",
+      note: "5×5 交互（記憶負荷あり）",
+      config: { size: 5, order: "alternating" },
+    },
+  ],
   domains: ["processing-speed", "visuospatial"],
   bucketVersion: 1,
   timingSensitive: false,

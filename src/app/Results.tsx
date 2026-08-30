@@ -22,6 +22,7 @@ interface Props {
   run: Run;
   onRetry: () => void;
   onHome: () => void;
+  onReconfigure: () => void;
 }
 
 function formatMetric(value: number | undefined, precision = 0): string {
@@ -29,7 +30,7 @@ function formatMetric(value: number | undefined, precision = 0): string {
   return value.toFixed(precision);
 }
 
-export function Results({ def, run, onRetry, onHome }: Props) {
+export function Results({ def, run, onRetry, onHome, onReconfigure }: Props) {
   const [history, setHistory] = useState<Run[] | null>(null);
 
   useEffect(() => {
@@ -80,7 +81,7 @@ export function Results({ def, run, onRetry, onHome }: Props) {
   return (
     <div class="app-shell">
       <header class="app-header">
-        <h1 class="app-title">{def.name}</h1>
+        <h1 class="app-title exercise">{def.name}</h1>
         <span class="faint">{describeBucket(def, run.configSnapshot)}</span>
       </header>
 
@@ -173,6 +174,9 @@ export function Results({ def, run, onRetry, onHome }: Props) {
       <div class="row" style="margin-top: var(--s-5)">
         <button type="button" class="primary" onClick={onRetry}>
           もう一度 <kbd>Space</kbd>
+        </button>
+        <button type="button" onClick={onReconfigure}>
+          設定を変える
         </button>
         <button type="button" onClick={onHome}>
           ホーム <kbd>Esc</kbd>

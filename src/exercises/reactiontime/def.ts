@@ -26,6 +26,18 @@ export const reactionTimeDef: ExerciseDef = {
   id: "reactiontime",
   name: "反応時間",
   blurb: "その日の覚醒度を測る基準線。訓練ではなく体調チェック用。",
+  instructions: [
+    "画面の四角が青く光ったら、できるだけ速く Space を押します。",
+    "光るまでの待ち時間はランダムです。予測して早押しすると「フライング」となり、その試行はやり直しになります。",
+    "選択反応モードでは、光った側に対応する F または J を押します。",
+    "最初の数回はウォームアップで、記録には含まれません。",
+    "訓練種目ではありません。毎日これを測っておくと、他の種目のスコアが落ちたときに「実力不足」なのか「寝不足」なのかを切り分けられます。",
+  ],
+  presets: [
+    { name: "クイック", note: "10試行 / 約30秒", config: { trials: 10, mode: "simple" } },
+    { name: "標準", note: "20試行 / 約1分", config: { trials: 20, mode: "simple" } },
+    { name: "選択反応", note: "20試行 / F・J", config: { trials: 20, mode: "choice" } },
+  ],
   domains: ["processing-speed"],
   bucketVersion: 1,
   timingSensitive: true,

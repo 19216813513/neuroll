@@ -118,11 +118,27 @@ export interface SessionContext {
   onProgress?: (fraction: number) => void;
 }
 
+export interface ExercisePreset {
+  name: string;
+  /** Only the keys that differ from the defaults. */
+  config: Config;
+  /** Shown under the name so the tradeoff is visible before selecting. */
+  note?: string;
+}
+
 export interface ExerciseDef {
   id: string;
   name: string;
   /** One sentence on what it trains. */
   blurb: string;
+  /**
+   * How to play, in order. Shown on the setup screen before the first run.
+   * An exercise nobody can figure out trains nothing, so this is required
+   * rather than optional.
+   */
+  instructions: string[];
+  /** Named difficulty starting points, easiest first. */
+  presets: ExercisePreset[];
   domains: CognitiveDomain[];
   /** Bump when stimulus generation or scoring changes; isolates old records. */
   bucketVersion: number;

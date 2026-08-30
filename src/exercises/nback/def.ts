@@ -39,6 +39,36 @@ export const nbackDef: ExerciseDef = {
   id: "nback",
   name: "N-back",
   blurb: "n個前と同じかを判断し続ける。ワーキングメモリの更新に最も強い負荷。",
+  instructions: [
+    "刺激が1つずつ順番に提示されます。",
+    "「今の刺激は N 個前と同じか？」を毎回判断します。N=2 なら 2 個前との比較です（直前ではありません）。",
+    "同じだと思ったときだけキーを押します。違うと思ったら何も押しません（押さないのが正解の回も多いです）。",
+    "位置 = A キー、音/文字 = L キー。両方一致したら両方押します。",
+    "最初の N 回は比較対象がないため採点されません。覚えるだけで OK です。",
+    "Esc で中断できます。",
+  ],
+  presets: [
+    {
+      name: "入門",
+      note: "位置のみ / N=1",
+      config: { modalities: ["position"], n: 1, trials: 15, isiMs: 2500 },
+    },
+    {
+      name: "シングル",
+      note: "位置のみ / N=2",
+      config: { modalities: ["position"], n: 2, trials: 20, isiMs: 2500 },
+    },
+    {
+      name: "デュアル標準",
+      note: "位置+音 / N=2",
+      config: { modalities: ["position", "audio"], n: 2, trials: 20, isiMs: 2500 },
+    },
+    {
+      name: "高負荷",
+      note: "N=3 / Lure 20% / 短い間隔",
+      config: { modalities: ["position", "audio"], n: 3, trials: 30, isiMs: 1800, lureRate: 20 },
+    },
+  ],
   domains: ["working-memory"],
   bucketVersion: 1,
   timingSensitive: false,
@@ -56,8 +86,10 @@ export const nbackDef: ExerciseDef = {
         { value: "color", label: "色" },
         { value: "shape", label: "形" },
       ],
-      default: ["position", "audio"],
+      default: ["position"],
       help: "2つ以上選ぶとデュアル/トリプル N-back。同時に追う数だけ難度が上がる。",
+      // Single visual n-back is the default: it is the version you can learn the
+      // rule on, and it works with the sound off.
     },
     {
       key: "n",
@@ -161,6 +193,19 @@ export const nbackDef: ExerciseDef = {
       default: true,
     },
     {
+      key: "audioMode",
+      label: "音の出し方",
+      kind: "enum",
+      affects: "cosmetic",
+      options: [
+        { value: "sound", label: "音のみ" },
+        { value: "visual", label: "文字のみ" },
+        { value: "both", label: "音＋文字" },
+      ],
+      default: "both",
+      help: "音を出せない環境でも、文字表示にすれば同じ課題として成立します。",
+    },
+    {
       key: "volume",
       label: "音量",
       kind: "int",
@@ -225,16 +270,27 @@ async function runNback(ctx: SessionContext): Promise<RunResult> {
     ctx.rng,
   );
 
-  const usesAudio = modalities.includes("audio");
-  if (usesAudio) {
+  const hasAudioStream = modalities.includes("audio");
+  const audioMode = (config.audioMode as string) ?? "both";
+  const playsSound = hasAudioStream && audioMode !== "visual";
+  const showsAudioGlyph = hasAudioStream && audioMode !== "sound";
+
+  if (playsSound) {
     audioEngine.setVolume((config.volume as number) / 100);
-    await audioEngine.init();
+    // Failing to get an AudioContext must not kill the session: fall back to the
+    // on-screen glyph rather than leaving the participant with no second stream.
+    try {
+      await audioEngine.init();
+    } catch {
+      console.warn("neuroll: audio unavailable, falling back to the visual glyph");
+    }
   }
 
   const view = buildView(ctx.root, {
     gridSize,
     modalities,
     showFixation: config.showFixation as boolean,
+    showAudioGlyph: showsAudioGlyph || (hasAudioStream && !audioEngine.ready),
   });
 
   const records: TrialRecord[] = [];
@@ -285,7 +341,7 @@ async function runNback(ctx: SessionContext): Promise<RunResult> {
       view.resetTrial(isScored ? `${i - n + 1}/${scoredTrials}` : "");
 
       presentedAt = await paintAndTimestamp(() => view.showStimulus(trial.values));
-      if (usesAudio && trial.values.audio !== undefined) {
+      if (playsSound && audioEngine.ready && trial.values.audio !== undefined) {
         audioEngine.play(trial.values.audio);
       }
 
@@ -389,10 +445,18 @@ function waitForAnyKey(signal: AbortSignal): Promise<void> {
   });
 }
 
+/**
+ * Glyphs standing in for the auditory stream when sound is off or unavailable.
+ * Deliberately not letters-as-sounds: these are read, so they only need to be
+ * mutually distinct at a glance.
+ */
+const AUDIO_GLYPHS = ["ア", "カ", "サ", "タ", "ナ", "ハ", "マ", "ラ"];
+
 interface ViewOptions {
   gridSize: number;
   modalities: Modality[];
   showFixation: boolean;
+  showAudioGlyph: boolean;
 }
 
 interface NbackView {
@@ -433,13 +497,21 @@ function buildView(root: HTMLElement, options: ViewOptions): NbackView {
     grid.append(fixation);
   }
 
+  // Sits below the grid, outside the fixation area, so reading it does not
+  // compete with the positional stream for foveal attention.
+  const glyph = document.createElement("div");
+  glyph.className = "nb-glyph";
+  if (!options.showAudioGlyph) glyph.style.display = "none";
+
   const keys = document.createElement("div");
   keys.className = "nb-keys";
   const keyEls = new Map<Modality, HTMLDivElement>();
   for (const modality of options.modalities) {
     const key = document.createElement("div");
     key.className = "nb-key";
-    key.textContent = `${MODALITY_LABELS[modality]} ${MODALITY_KEYS[modality].toUpperCase()}`;
+    const label =
+      modality === "audio" && options.showAudioGlyph ? "音/文字" : MODALITY_LABELS[modality];
+    key.textContent = `${label} ${MODALITY_KEYS[modality].toUpperCase()}`;
     keys.append(key);
     keyEls.set(modality, key);
   }
@@ -447,7 +519,7 @@ function buildView(root: HTMLElement, options: ViewOptions): NbackView {
   const message = document.createElement("div");
   message.className = "nb-message";
 
-  stage.append(counter, grid, keys, message);
+  stage.append(counter, grid, glyph, keys, message);
   root.append(stage);
 
   // The lit cell is tracked so hiding does not have to touch every cell.
@@ -463,6 +535,9 @@ function buildView(root: HTMLElement, options: ViewOptions): NbackView {
         values.color !== undefined ? (COLORS[values.color] as string) : "var(--stimulus)";
       cell.textContent = values.shape !== undefined ? (SHAPES[values.shape] as string) : "";
       cell.classList.add("is-lit");
+      if (options.showAudioGlyph && values.audio !== undefined) {
+        glyph.textContent = AUDIO_GLYPHS[values.audio] ?? "";
+      }
     },
     hideStimulus() {
       if (!litCell) return;
@@ -470,6 +545,7 @@ function buildView(root: HTMLElement, options: ViewOptions): NbackView {
       litCell.style.background = "";
       litCell.textContent = "";
       litCell = null;
+      glyph.textContent = "";
     },
     resetTrial(counterText) {
       counter.textContent = counterText;
