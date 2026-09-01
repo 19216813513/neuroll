@@ -110,6 +110,13 @@ export const reactionTimeDef: ExerciseDef = {
       default: true,
     },
   ],
+  keyHints: (config) =>
+    config.mode === "choice"
+      ? [
+          { key: "F", label: "左が光ったら" },
+          { key: "J", label: "右が光ったら" },
+        ]
+      : [{ key: "Space", label: "光ったら" }],
   metrics: [
     { key: "medianRt", label: "中央値", unit: "ms", precision: 0, higherIsBetter: false },
     { key: "meanRt", label: "平均", unit: "ms", precision: 0, higherIsBetter: false },

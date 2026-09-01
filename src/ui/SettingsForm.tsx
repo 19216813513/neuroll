@@ -20,8 +20,11 @@ interface Props {
 }
 
 export function SettingsForm({ def, config, onChange }: Props) {
-  const basic = def.settings.filter((s) => !s.advanced);
-  const advanced = def.settings.filter((s) => s.advanced);
+  // A control that cannot affect the session is hidden rather than disabled:
+  // a greyed-out "音の出し方" still reads as though sound is part of the task.
+  const visible = def.settings.filter((s) => s.visibleWhen?.(config) ?? true);
+  const basic = visible.filter((s) => !s.advanced);
+  const advanced = visible.filter((s) => s.advanced);
 
   const set = (key: string, value: unknown): void => onChange({ ...config, [key]: value });
 

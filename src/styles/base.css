@@ -216,7 +216,9 @@ kbd {
   justify-content: flex-end;
   gap: var(--s-1);
   max-width: min(340px, 40vw);
-  opacity: 0.55;
+  /* Dim enough not to compete with the stimulus, but it was missed entirely at
+     0.55 — the point is defeated if it reads as decoration. */
+  opacity: 0.75;
 }
 
 .session-config:hover {
@@ -261,6 +263,24 @@ kbd {
   .session-config .chip:not(.is-primary) {
     display: none;
   }
+}
+
+.key-legend {
+  margin-top: var(--s-5);
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--border);
+}
+
+.key-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.nb-key {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
 }
 
 .rt-stage {

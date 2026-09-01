@@ -14,7 +14,13 @@ import { AUDIO_ALPHABET_SIZE, audioEngine } from "~/core/audio";
 import { paintAndTimestamp } from "~/core/clock";
 import { eventTime } from "~/core/input";
 import { AbortError, delay } from "~/core/scheduler";
-import type { ExerciseDef, RunResult, SessionContext, TrialRecord } from "~/exercises/types";
+import type {
+  Config,
+  ExerciseDef,
+  RunResult,
+  SessionContext,
+  TrialRecord,
+} from "~/exercises/types";
 import { generateSequence, type Modality, type StreamSpec } from "./generate";
 import { type NbackScoreTrial, scoreNback } from "./score";
 
@@ -31,6 +37,14 @@ const MODALITY_LABELS: Record<Modality, string> = {
   color: "色",
   shape: "形",
 };
+
+/** Reads the modality list off a config, ignoring anything unrecognised. */
+function asModalities(config: Config): Modality[] {
+  const raw = config.modalities;
+  return (Array.isArray(raw) ? raw : []).filter(
+    (m): m is Modality => (m as string) in MODALITY_KEYS,
+  );
+}
 
 const COLORS = ["#4da3ff", "#f87171", "#4ade80", "#fbbf24", "#c084fc", "#22d3ee"];
 const SHAPES = ["●", "■", "▲", "◆", "★", "✚"];
@@ -204,6 +218,9 @@ export const nbackDef: ExerciseDef = {
       ],
       default: "both",
       help: "音を出せない環境でも、文字表示にすれば同じ課題として成立します。",
+      // Without the audio stream there is nothing for this to control, and
+      // leaving it adjustable reads as a promise that sound will play.
+      visibleWhen: (config) => asModalities(config).includes("audio"),
     },
     {
       key: "volume",
@@ -214,8 +231,18 @@ export const nbackDef: ExerciseDef = {
       max: 100,
       step: 5,
       default: 70,
+      visibleWhen: (config) =>
+        asModalities(config).includes("audio") && config.audioMode !== "visual",
     },
   ],
+  keyHints: (config) =>
+    asModalities(config).map((modality) => ({
+      key: MODALITY_KEYS[modality].toUpperCase(),
+      label:
+        modality === "audio" && config.audioMode !== "sound"
+          ? "音/文字"
+          : MODALITY_LABELS[modality],
+    })),
   metrics: [
     { key: "dPrime", label: "d′", precision: 2, higherIsBetter: true },
     { key: "meanRt", label: "平均反応", unit: "ms", precision: 0, higherIsBetter: false },
@@ -291,6 +318,7 @@ async function runNback(ctx: SessionContext): Promise<RunResult> {
     modalities,
     showFixation: config.showFixation as boolean,
     showAudioGlyph: showsAudioGlyph || (hasAudioStream && !audioEngine.ready),
+    n,
   });
 
   const records: TrialRecord[] = [];
@@ -457,6 +485,7 @@ interface ViewOptions {
   modalities: Modality[];
   showFixation: boolean;
   showAudioGlyph: boolean;
+  n: number;
 }
 
 interface NbackView {
@@ -511,7 +540,14 @@ function buildView(root: HTMLElement, options: ViewOptions): NbackView {
     key.className = "nb-key";
     const label =
       modality === "audio" && options.showAudioGlyph ? "音/文字" : MODALITY_LABELS[modality];
-    key.textContent = `${label} ${MODALITY_KEYS[modality].toUpperCase()}`;
+    // "位置 A" alone never says what A does. The rule is the hard part of this
+    // task, so the reminder stays on screen for the whole session.
+    key.innerHTML = "";
+    const kbd = document.createElement("kbd");
+    kbd.textContent = MODALITY_KEYS[modality].toUpperCase();
+    const text = document.createElement("span");
+    text.textContent = `${label}が${options.n}個前と同じ`;
+    key.append(kbd, text);
     keys.append(key);
     keyEls.set(modality, key);
   }

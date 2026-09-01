@@ -20,6 +20,9 @@ interface Props {
 
 export function ExerciseSetup({ def, config, onStart, onBack }: Props) {
   const [draft, setDraft] = useState<Config>(config);
+  // Derived from the draft, so changing modality updates the key list before the
+  // session starts rather than surprising the participant mid-run.
+  const keys = def.keyHints?.(draft) ?? [];
 
   return (
     <div class="app-shell">
@@ -42,6 +45,20 @@ export function ExerciseSetup({ def, config, onStart, onBack }: Props) {
       <div class="card" style="margin-top: var(--s-4)">
         <h2 class="section-title">設定</h2>
         <SettingsForm def={def} config={draft} onChange={setDraft} />
+
+        {keys.length > 0 && (
+          <div class="key-legend">
+            <span class="settings-legend">この設定で使うキー</span>
+            <div class="row">
+              {keys.map((hint) => (
+                <span class="key-hint" key={hint.key}>
+                  <kbd>{hint.key}</kbd>
+                  <span class="faint">{hint.label}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div class="setup-actions">
