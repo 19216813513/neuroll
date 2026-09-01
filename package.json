@@ -11,7 +11,12 @@
     "test:watch": "vitest",
     "lint": "biome check src",
     "fix": "biome check --write src",
-    "deploy": "npm run build && wrangler pages deploy dist --project-name neuroll"
+    "deploy": "npm run build && wrangler deploy",
+    "deploy:dry": "npm run build && wrangler deploy --dry-run",
+    "deploy:preview": "npm run build && wrangler versions upload",
+    "cf:whoami": "wrangler whoami",
+    "cf:login": "wrangler login",
+    "cf:tail": "wrangler tail"
   },
   "dependencies": {
     "idb": "^8.0.3",

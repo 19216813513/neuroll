@@ -3,6 +3,12 @@
   "name": "neuroll",
   "compatibility_date": "2026-08-01",
 
+  // Pinned so a deploy can only ever reach this account. A Cloudflare login can
+  // belong to several accounts, and without this wrangler would silently pick
+  // whichever one the OAuth token happens to resolve to. Not a secret: the same
+  // id appears in every dashboard URL and grants nothing on its own.
+  "account_id": "862a6830800470887d5062a82d5ec062",
+
   // Static-assets-only Worker: there is no `main` script, so no Worker code runs
   // and every request is served straight from the asset store. That matters for
   // cost — asset requests are free and unlimited on all plans, while requests
