@@ -18,11 +18,21 @@ import { AbortError, FrameMonitor } from "~/core/scheduler";
 import { ulid } from "~/core/ulid";
 import { VisibilityMonitor } from "~/core/visibility";
 import type { Config, ExerciseDef } from "~/exercises/types";
-import { computeBucket } from "~/scores/bucket";
+import { computeBucket, summariseDifficulty } from "~/scores/bucket";
 import { validateRun } from "~/scores/validate";
 import { saveRun } from "~/store/runs";
 import type { Run, Trial } from "~/store/types";
 import { SCHEMA_VERSION } from "~/store/types";
+
+/**
+ * The one setting per exercise that has to stay in the participant's head while
+ * playing. Everything else is context; this is the number they are working with.
+ */
+const PRIMARY_SETTING: Record<string, string> = {
+  nback: "n",
+  schulte: "order",
+  reactiontime: "mode",
+};
 
 export interface SessionOutcome {
   run: Run;
@@ -192,6 +202,21 @@ export function Session({ def, config, deviceProfile, onFinish, onAbort }: Props
       >
         中断 <kbd>Esc</kbd>
       </button>
+      {/* Which condition is being measured is not cosmetic here: scores are
+          bucketed per difficulty setting, so a run you cannot identify is a run
+          you cannot interpret. Static and dim, in the opposite corner from the
+          quit button, so it informs without competing with the stimulus. */}
+      <div class="session-config">
+        {summariseDifficulty(def, config).map((item) => (
+          <span
+            key={item.key}
+            class={item.key === PRIMARY_SETTING[def.id] ? "chip is-primary" : "chip"}
+          >
+            {item.label && <span class="chip-label">{item.label}</span>}
+            <span class="chip-value">{item.value}</span>
+          </span>
+        ))}
+      </div>
       <div ref={hostRef} />
     </div>
   );

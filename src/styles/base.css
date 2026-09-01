@@ -203,6 +203,66 @@ kbd {
   color: var(--text);
 }
 
+/* Condition readout, mirrored opposite the quit button. Wraps rather than
+   scrolls: an exercise with many difficulty settings must never push the
+   stimulus around, so this is absolutely positioned and capped in width. */
+.session-config {
+  position: absolute;
+  top: var(--s-4);
+  right: var(--s-4);
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s-1);
+  max-width: min(340px, 40vw);
+  opacity: 0.55;
+}
+
+.session-config:hover {
+  opacity: 1;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.chip-label {
+  color: var(--text-faint);
+}
+
+.chip-value {
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+}
+
+.chip.is-primary {
+  border-color: var(--accent-dim);
+}
+
+.chip.is-primary .chip-value {
+  color: var(--accent);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+/* On a narrow screen the full chip set wraps into a column tall enough to reach
+   the stimulus. Text over the stimulus is never acceptable, so everything except
+   the one setting that has to stay in mind is dropped; the rest is one screen
+   away on setup. */
+@media (max-width: 700px) {
+  .session-config .chip:not(.is-primary) {
+    display: none;
+  }
+}
+
 .rt-stage {
   display: grid;
   gap: var(--s-5);

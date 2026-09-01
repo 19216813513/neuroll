@@ -104,17 +104,29 @@ export function computeBucket({ def, config, deviceClass }: BucketInput): string
 /** Short prefix for display and debugging. Never used as an identity. */
 export const shortBucket = (bucket: string): string => bucket.slice(0, 8);
 
+export interface DifficultyItem {
+  key: string;
+  /** Setting name, or empty when the value already reads as its own label. */
+  label: string;
+  value: string;
+}
+
 /**
- * Human-readable summary of what makes a bucket distinct, e.g. "N=3 / ISI 2500ms".
- * Used as the row label in the high-score views.
+ * The difficulty settings as label/value pairs.
+ *
+ * Structured rather than pre-joined because callers need different shapes: the
+ * session overlay renders each item separately so the one that matters most can
+ * be emphasised, while list rows want a single line.
  */
-export function describeBucket(def: ExerciseDef, config: Config): string {
-  const parts: string[] = [];
+export function summariseDifficulty(def: ExerciseDef, config: Config): DifficultyItem[] {
+  const items: DifficultyItem[] = [];
   for (const setting of def.settings) {
     if (setting.affects !== "difficulty") continue;
     const value = config[setting.key];
+
     if (setting.kind === "bool") {
-      if (value === true) parts.push(setting.label);
+      // A disabled flag is not worth the space; only mention it when it is on.
+      if (value === true) items.push({ key: setting.key, label: "", value: setting.label });
       continue;
     }
     if (setting.kind === "multi") {
@@ -123,18 +135,29 @@ export function describeBucket(def: ExerciseDef, config: Config): string {
         const labels = list.map(
           (v) => setting.options.find((o) => o.value === v)?.label ?? String(v),
         );
-        parts.push(labels.join("+"));
+        items.push({ key: setting.key, label: "", value: labels.join("+") });
       }
       continue;
     }
     if (setting.kind === "enum") {
       const label = setting.options.find((o) => o.value === value)?.label;
-      if (label) parts.push(label);
+      if (label) items.push({ key: setting.key, label: "", value: label });
       continue;
     }
     const unit = "unit" in setting && setting.unit ? setting.unit : "";
-    parts.push(`${setting.label} ${value}${unit}`);
+    items.push({ key: setting.key, label: setting.label, value: `${value}${unit}` });
   }
+  return items;
+}
+
+/**
+ * Human-readable summary of what makes a bucket distinct, e.g. "N 3 / ISI 2500ms".
+ * Used as the row label in the high-score views.
+ */
+export function describeBucket(def: ExerciseDef, config: Config): string {
+  const parts = summariseDifficulty(def, config).map((item) =>
+    item.label ? `${item.label} ${item.value}` : item.value,
+  );
   return parts.join(" / ") || "既定";
 }
 
