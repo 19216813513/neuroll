@@ -45,12 +45,16 @@ export function Session({ def, config, deviceProfile, onFinish, onAbort }: Props
   const abortRef = useRef(onAbort);
   finishRef.current = onFinish;
   abortRef.current = onAbort;
+  // Lets the quit button reach the same AbortController that Escape uses, so
+  // both paths unwind through identical cleanup.
+  const controllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
 
     const controller = new AbortController();
+    controllerRef.current = controller;
     const frames = new FrameMonitor();
     const visibility = new VisibilityMonitor();
     const seed = newSeed();
@@ -169,6 +173,25 @@ export function Session({ def, config, deviceProfile, onFinish, onAbort }: Props
 
   return (
     <div class="session">
+      {/* Escape alone is undiscoverable and unusable with a mouse or on touch,
+          which leaves a running session with no visible way out. The button is
+          dimmed until hovered so it does not compete with the stimulus, and it
+          is removed from the tab order: exercises read Space and letter keys
+          from the window, and a focused button would swallow Space as a click. */}
+      <button
+        type="button"
+        class="session-quit"
+        tabIndex={-1}
+        // Schulte starts on pointerdown anywhere on its stage, so the press must
+        // not also register as a tap on the exercise underneath.
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          controllerRef.current?.abort();
+        }}
+      >
+        中断 <kbd>Esc</kbd>
+      </button>
       <div ref={hostRef} />
     </div>
   );

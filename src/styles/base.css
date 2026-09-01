@@ -183,6 +183,26 @@ kbd {
   contain: layout paint;
 }
 
+/* Sits in the corner of the session, deliberately quiet: visible enough to find
+   when wanted, dim enough not to pull attention off the stimulus. */
+.session-quit {
+  position: absolute;
+  top: var(--s-4);
+  left: var(--s-4);
+  z-index: 2;
+  padding: var(--s-2) var(--s-3);
+  font-size: 0.82rem;
+  color: var(--text-faint);
+  background: transparent;
+  border-color: var(--border);
+  opacity: 0.5;
+}
+
+.session-quit:hover {
+  opacity: 1;
+  color: var(--text);
+}
+
 .rt-stage {
   display: grid;
   gap: var(--s-5);
