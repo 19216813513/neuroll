@@ -190,6 +190,32 @@ describe("describeBucket", () => {
     expect(label).not.toContain("ダーク");
   });
 
+  it("omits a setting that is hidden for the config in hand", () => {
+    const gated: ExerciseDef = {
+      ...def,
+      settings: [
+        ...def.settings,
+        {
+          key: "gridSize",
+          label: "グリッド",
+          kind: "enum",
+          options: [
+            { value: "2", label: "2×2" },
+            { value: "3", label: "3×3" },
+          ],
+          default: "3",
+          affects: "difficulty",
+          visibleWhen: (config) => (config.modalities as string[]).includes("position"),
+        },
+      ],
+    };
+
+    expect(describeBucket(gated, { ...base, gridSize: "2" })).toContain("2×2");
+    // Nothing was placed in a grid, so the label must not claim one.
+    const noPosition: Config = { ...base, modalities: ["audio"], gridSize: "2" };
+    expect(describeBucket(gated, noPosition)).not.toContain("2×2");
+  });
+
   it("omits a false boolean and includes a true one", () => {
     expect(describeBucket(def, { ...base, adaptive: false })).not.toContain("適応モード");
     expect(describeBucket(def, base)).toContain("適応モード");

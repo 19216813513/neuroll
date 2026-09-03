@@ -186,6 +186,75 @@ describe("N-back session", () => {
     expect(Number.isFinite(result.metrics.dPrime_audio as number)).toBe(true);
   }, 30_000);
 
+  it("keeps a 2x2 grid to its four positions and uses all of them", async () => {
+    const seen = new Set<number>();
+    let cells = 0;
+    // Sampled only while something is lit: the view is torn down before the last
+    // frame, so a reading taken unconditionally would just record the empty root.
+    const harness = createHarness(root, ({ litCellIndex }) => {
+      if (litCellIndex !== null) {
+        cells = root.querySelectorAll(".nb-cell").length;
+        seen.add(litCellIndex);
+      }
+      return [];
+    });
+
+    const result = await harness.run(
+      config({
+        modalities: ["position"],
+        gridSize: "2",
+        n: 1,
+        trials: 20,
+        stimulusMs: 200,
+        isiMs: 200,
+      }),
+    );
+
+    expect(result.trials).toHaveLength(20);
+    expect(cells).toBe(4);
+    // A position past the end of the grid lights no cell at all, so the session
+    // would run to completion with nothing on screen — scoring a blank stream.
+    expect([...seen].every((index) => index >= 0 && index < 4)).toBe(true);
+    expect(seen.size).toBe(4);
+  }, 30_000);
+
+  it("collapses the grid to one cell when nothing is positional", async () => {
+    const drawn = new Set<string>();
+    let cells = 0;
+    let fixations = 0;
+    let strayShape = false;
+    const harness = createHarness(root, ({ litCellIndex }) => {
+      const paths = [...root.querySelectorAll(".nb-shape path")]
+        .map((path) => path.getAttribute("d"))
+        .filter((d): d is string => d !== null && d !== "");
+      if (litCellIndex === null) {
+        // A path left behind would still be on screen during the blank interval
+        // and would then reappear under the next trial's colour.
+        if (paths.length > 0) strayShape = true;
+      } else {
+        // Sampled while lit for the same reason as above: the view is gone by the
+        // final frame.
+        cells = root.querySelectorAll(".nb-cell").length;
+        fixations = root.querySelectorAll(".nb-fixation").length;
+        for (const d of paths) drawn.add(d);
+      }
+      return [];
+    });
+
+    const result = await harness.run(
+      config({ modalities: ["shape"], n: 1, trials: 12, stimulusMs: 200, isiMs: 200 }),
+    );
+
+    expect(result.trials).toHaveLength(12);
+    // One cell, and no fixation mark to sit on top of the stimulus inside it.
+    expect(cells).toBe(1);
+    expect(fixations).toBe(0);
+    expect(strayShape).toBe(false);
+    // The alphabet is actually being used, rather than the same path every trial.
+    expect(drawn.size).toBeGreaterThan(2);
+    for (const d of drawn) expect(d.startsWith("M")).toBe(true);
+  }, 30_000);
+
   it("leaves no key listeners or DOM behind when it finishes", async () => {
     const added: string[] = [];
     const removed: string[] = [];

@@ -47,7 +47,47 @@ function asModalities(config: Config): Modality[] {
 }
 
 const COLORS = ["#4da3ff", "#f87171", "#4ade80", "#fbbf24", "#c084fc", "#22d3ee"];
-const SHAPES = ["●", "■", "▲", "◆", "★", "✚"];
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/**
+ * The shape alphabet, drawn rather than typed.
+ *
+ * Font glyphs were the first version of this and the wrong one: which of
+ * ●■▲◆★✚ a device actually has, how heavily it draws them, and whether it
+ * substitutes a colour emoji all vary by platform — and n-back is not
+ * device-partitioned (`timingSensitive` is false, see computeBucket), so two
+ * runs in the same bucket could have been looking at different stimuli. A path
+ * in a fixed viewBox is identical everywhere and scales with the cell instead
+ * of with the font size.
+ *
+ * Chosen for distinctness at a glance rather than for variety: nothing here is
+ * another entry mirrored or rotated (▼ against ▲ would be), because telling
+ * those apart is perceptual work and not the memory load the exercise exists to
+ * impose. The original six keep their index, so an old sequence still means
+ * what it did.
+ */
+const SHAPES: readonly string[] = [
+  // circle
+  "M6 50A44 44 0 1 1 94 50A44 44 0 1 1 6 50Z",
+  // square
+  "M10 10H90V90H10Z",
+  // triangle
+  "M50 8L94 88H6Z",
+  // diamond
+  "M50 4L96 50L50 96L4 50Z",
+  // star
+  "M50 4L61.2 34.6L93.8 35.8L68.1 55.9L77 87.2L50 69L23 87.2L31.9 55.9L6.2 35.8L38.8 34.6Z",
+  // plus
+  "M35 6H65V35H94V65H65V94H35V65H6V35H35Z",
+  // ring — the inner circle is wound the other way, so the hole stays a hole
+  "M6 50A44 44 0 1 1 94 50A44 44 0 1 1 6 50ZM26 50A24 24 0 1 0 74 50A24 24 0 1 0 26 50Z",
+  // half circle
+  "M6 72A44 44 0 0 1 94 72Z",
+  // hexagon
+  "M96 50L73 89.8L27 89.8L4 50L27 10.2L73 10.2Z",
+  // heart
+  "M50 92C22 71 8 53 8 36A24 24 0 0 1 50 21A24 24 0 0 1 92 36C92 53 78 71 50 92Z",
+];
 
 export const nbackDef: ExerciseDef = {
   id: "nback",
@@ -57,7 +97,7 @@ export const nbackDef: ExerciseDef = {
     "刺激が1つずつ順番に提示されます。",
     "「今の刺激は N 個前と同じか？」を毎回判断します。N=2 なら 2 個前との比較です（直前ではありません）。",
     "同じだと思ったときだけキーを押します。違うと思ったら何も押しません（押さないのが正解の回も多いです）。",
-    "位置 = A キー、音/文字 = L キー。両方一致したら両方押します。",
+    "キーはモダリティごとに別です（位置 = A、音/文字 = L、色 = S、形 = K）。複数一致したらその分だけ押します。",
     "最初の N 回は比較対象がないため採点されません。覚えるだけで OK です。",
     "Esc で中断できます。",
   ],
@@ -183,10 +223,15 @@ export const nbackDef: ExerciseDef = {
       kind: "enum",
       affects: "difficulty",
       options: [
+        { value: "2", label: "2×2" },
         { value: "3", label: "3×3" },
         { value: "4", label: "4×4" },
       ],
       default: "3",
+      help: "マスが少ないほど難しい。4マスだと同じ位置がすぐに再来するため、見覚えでは答えられず、何個前だったかを数えるしかなくなる。",
+      // Inert without a positional stream: the grid is still drawn, but the
+      // stimulus no longer moves around it (see buildView).
+      visibleWhen: (config) => asModalities(config).includes("position"),
     },
     {
       key: "feedback",
@@ -314,7 +359,9 @@ async function runNback(ctx: SessionContext): Promise<RunResult> {
   }
 
   const view = buildView(ctx.root, {
-    gridSize,
+    // With no positional stream there is nothing to place, so the grid collapses
+    // to a single centred cell rather than lighting the top-left corner.
+    gridSize: modalities.includes("position") ? gridSize : 1,
     modalities,
     showFixation: config.showFixation as boolean,
     showAudioGlyph: showsAudioGlyph || (hasAudioStream && !audioEngine.ready),
@@ -512,14 +559,28 @@ function buildView(root: HTMLElement, options: ViewOptions): NbackView {
   grid.style.setProperty("--grid-size", String(options.gridSize));
 
   const cells: HTMLDivElement[] = [];
+  const shapes: SVGPathElement[] = [];
   for (let i = 0; i < options.gridSize * options.gridSize; i++) {
     const cell = document.createElement("div");
     cell.className = "nb-cell";
+    // The shape layer is created up front and left empty. Its box never changes
+    // size, so presenting a shape is a repaint and not a relayout — the same
+    // reason the cell only ever animates its background colour.
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("viewBox", "0 0 100 100");
+    svg.setAttribute("class", "nb-shape");
+    svg.setAttribute("aria-hidden", "true");
+    const path = document.createElementNS(SVG_NS, "path");
+    svg.append(path);
+    cell.append(svg);
     grid.append(cell);
     cells.push(cell);
+    shapes.push(path);
   }
 
-  if (options.showFixation) {
+  // A collapsed grid puts the stimulus exactly where the eye already is, so a
+  // fixation mark there would only sit on top of it every single trial.
+  if (options.showFixation && options.gridSize > 1) {
     const fixation = document.createElement("div");
     fixation.className = "nb-fixation";
     fixation.textContent = "+";
@@ -560,16 +621,20 @@ function buildView(root: HTMLElement, options: ViewOptions): NbackView {
 
   // The lit cell is tracked so hiding does not have to touch every cell.
   let litCell: HTMLDivElement | null = null;
+  let litShape: SVGPathElement | null = null;
 
   return {
     showStimulus(values) {
-      const index = values.position;
-      const cell = index === undefined ? cells[0] : cells[index];
+      const index = values.position ?? 0;
+      const cell = cells[index];
       if (!cell) return;
       litCell = cell;
       cell.style.background =
         values.color !== undefined ? (COLORS[values.color] as string) : "var(--stimulus)";
-      cell.textContent = values.shape !== undefined ? (SHAPES[values.shape] as string) : "";
+      if (values.shape !== undefined) {
+        litShape = shapes[index] ?? null;
+        litShape?.setAttribute("d", (SHAPES[values.shape] as string) ?? "");
+      }
       cell.classList.add("is-lit");
       if (options.showAudioGlyph && values.audio !== undefined) {
         glyph.textContent = AUDIO_GLYPHS[values.audio] ?? "";
@@ -579,7 +644,8 @@ function buildView(root: HTMLElement, options: ViewOptions): NbackView {
       if (!litCell) return;
       litCell.classList.remove("is-lit");
       litCell.style.background = "";
-      litCell.textContent = "";
+      litShape?.removeAttribute("d");
+      litShape = null;
       litCell = null;
       glyph.textContent = "";
     },

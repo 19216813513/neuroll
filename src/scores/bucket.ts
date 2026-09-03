@@ -122,6 +122,12 @@ export function summariseDifficulty(def: ExerciseDef, config: Config): Difficult
   const items: DifficultyItem[] = [];
   for (const setting of def.settings) {
     if (setting.affects !== "difficulty") continue;
+    // A setting the form hides for this config cannot have shaped the session,
+    // so naming it here would describe a condition that was never presented —
+    // "2×2" on a run that had no positional stream to place in a grid. Only the
+    // description skips it: difficultyProjection must keep every key, or every
+    // stored bucket id would change.
+    if (setting.visibleWhen && !setting.visibleWhen(config)) continue;
     const value = config[setting.key];
 
     if (setting.kind === "bool") {
