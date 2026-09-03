@@ -6,6 +6,8 @@ const def: ExerciseDef = {
   id: "test",
   name: "Test",
   blurb: "",
+  instructions: [],
+  presets: [],
   domains: ["working-memory"],
   bucketVersion: 1,
   settings: [

@@ -18,11 +18,21 @@ import { AbortError, FrameMonitor } from "~/core/scheduler";
 import { ulid } from "~/core/ulid";
 import { VisibilityMonitor } from "~/core/visibility";
 import type { Config, ExerciseDef } from "~/exercises/types";
-import { computeBucket } from "~/scores/bucket";
+import { computeBucket, summariseDifficulty } from "~/scores/bucket";
 import { validateRun } from "~/scores/validate";
 import { saveRun } from "~/store/runs";
 import type { Run, Trial } from "~/store/types";
 import { SCHEMA_VERSION } from "~/store/types";
+
+/**
+ * The one setting per exercise that has to stay in the participant's head while
+ * playing. Everything else is context; this is the number they are working with.
+ */
+const PRIMARY_SETTING: Record<string, string> = {
+  nback: "n",
+  schulte: "order",
+  reactiontime: "mode",
+};
 
 export interface SessionOutcome {
   run: Run;
@@ -45,12 +55,16 @@ export function Session({ def, config, deviceProfile, onFinish, onAbort }: Props
   const abortRef = useRef(onAbort);
   finishRef.current = onFinish;
   abortRef.current = onAbort;
+  // Lets the quit button reach the same AbortController that Escape uses, so
+  // both paths unwind through identical cleanup.
+  const controllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
 
     const controller = new AbortController();
+    controllerRef.current = controller;
     const frames = new FrameMonitor();
     const visibility = new VisibilityMonitor();
     const seed = newSeed();
@@ -169,6 +183,40 @@ export function Session({ def, config, deviceProfile, onFinish, onAbort }: Props
 
   return (
     <div class="session">
+      {/* Escape alone is undiscoverable and unusable with a mouse or on touch,
+          which leaves a running session with no visible way out. The button is
+          dimmed until hovered so it does not compete with the stimulus, and it
+          is removed from the tab order: exercises read Space and letter keys
+          from the window, and a focused button would swallow Space as a click. */}
+      <button
+        type="button"
+        class="session-quit"
+        tabIndex={-1}
+        // Schulte starts on pointerdown anywhere on its stage, so the press must
+        // not also register as a tap on the exercise underneath.
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          controllerRef.current?.abort();
+        }}
+      >
+        中断 <kbd>Esc</kbd>
+      </button>
+      {/* Which condition is being measured is not cosmetic here: scores are
+          bucketed per difficulty setting, so a run you cannot identify is a run
+          you cannot interpret. Static and dim, in the opposite corner from the
+          quit button, so it informs without competing with the stimulus. */}
+      <div class="session-config">
+        {summariseDifficulty(def, config).map((item) => (
+          <span
+            key={item.key}
+            class={item.key === PRIMARY_SETTING[def.id] ? "chip is-primary" : "chip"}
+          >
+            {item.label && <span class="chip-label">{item.label}</span>}
+            <span class="chip-value">{item.value}</span>
+          </span>
+        ))}
+      </div>
       <div ref={hostRef} />
     </div>
   );

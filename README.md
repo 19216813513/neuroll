@@ -38,15 +38,46 @@ Cloudflare は新規プロジェクトを Workers に誘導しており、静的
 
 Node のバージョンは [`.nvmrc`](.nvmrc) で固定しているので、環境変数の設定は不要。
 
-CLI から直接デプロイする場合:
+### CLI（wrangler）からデプロイする
+
+初回のみログインする。**ブラウザの OAuth を使うので、実行前にブラウザが目的の
+Cloudflare アカウントでサインインしていることを確認すること。**
 
 ```bash
-npx wrangler login
+npm run cf:login
 ```
+
+接続先の確認（読み取りのみ）。1つのログインが複数アカウントに所属している場合、
+ここに全部並ぶ。
+
+```bash
+npm run cf:whoami
+```
+
+デプロイ前の検証。ビルドと設定だけ確認して、アップロードはしない。
+
+```bash
+npm run deploy:dry
+```
+
+本番へデプロイ。
 
 ```bash
 npm run deploy
 ```
+
+本番を切り替えずにプレビュー版を上げる場合。
+
+```bash
+npm run deploy:preview
+```
+
+`wrangler.jsonc` に `account_id` を固定してあるので、別アカウントへのデプロイは
+wrangler が拒否する。アカウントを変える場合はここを書き換える。
+
+> **注意**: `wrangler pages deploy` は使わない。このプロジェクトは Pages ではなく
+> Workers 静的アセットなので、そのコマンドを打つと `neuroll` を更新せずに別物の
+> Pages プロジェクトが新規作成される。
 
 ローカルで本番相当の配信を確認する場合（`_headers` の検証はこれで足りる）:
 

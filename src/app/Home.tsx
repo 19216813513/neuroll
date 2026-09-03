@@ -18,9 +18,10 @@ import type { Run } from "~/store/types";
 interface Props {
   deviceProfile: DeviceProfile | null;
   onStart: (def: ExerciseDef) => void;
+  onConfigure: (def: ExerciseDef) => void;
 }
 
-export function Home({ deviceProfile, onStart }: Props) {
+export function Home({ deviceProfile, onStart, onConfigure }: Props) {
   const [runsByExercise, setRunsByExercise] = useState<Map<string, Run[]>>(new Map());
   const [message, setMessage] = useState<string | null>(null);
 
@@ -122,15 +123,21 @@ export function Home({ deviceProfile, onStart }: Props) {
                   {mostRecent.count} 回
                 </span>
               )}
-              <button
-                type="button"
-                class="primary"
-                style="margin-top: var(--s-2)"
-                onClick={() => onStart(def)}
-                disabled={!deviceProfile}
-              >
-                開始
-              </button>
+              {/* Pushed to the bottom of the tile so the buttons line up across
+                  cards whose descriptions differ in length. */}
+              <div class="tile-actions">
+                <button
+                  type="button"
+                  class="primary"
+                  onClick={() => onStart(def)}
+                  disabled={!deviceProfile}
+                >
+                  開始
+                </button>
+                <button type="button" onClick={() => onConfigure(def)} disabled={!deviceProfile}>
+                  設定
+                </button>
+              </div>
             </div>
           );
         })}

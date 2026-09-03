@@ -35,6 +35,12 @@ interface BaseSetting {
   affects: SettingAffects;
   /** Advanced settings collapse behind a disclosure. */
   advanced?: boolean;
+  /**
+   * Hides the control when it cannot do anything given the rest of the config.
+   * A setting that is adjustable but inert is worse than a missing one: it
+   * silently promises behaviour the session will not deliver.
+   */
+  visibleWhen?: (config: Config) => boolean;
 }
 
 export interface NumberSetting extends BaseSetting {
@@ -118,11 +124,27 @@ export interface SessionContext {
   onProgress?: (fraction: number) => void;
 }
 
+export interface ExercisePreset {
+  name: string;
+  /** Only the keys that differ from the defaults. */
+  config: Config;
+  /** Shown under the name so the tradeoff is visible before selecting. */
+  note?: string;
+}
+
 export interface ExerciseDef {
   id: string;
   name: string;
   /** One sentence on what it trains. */
   blurb: string;
+  /**
+   * How to play, in order. Shown on the setup screen before the first run.
+   * An exercise nobody can figure out trains nothing, so this is required
+   * rather than optional.
+   */
+  instructions: string[];
+  /** Named difficulty starting points, easiest first. */
+  presets: ExercisePreset[];
   domains: CognitiveDomain[];
   /** Bump when stimulus generation or scoring changes; isolates old records. */
   bucketVersion: number;
@@ -133,6 +155,11 @@ export interface ExerciseDef {
   higherIsBetter: boolean;
   /** True when reaction time dominates, so deviceClass joins the bucket. */
   timingSensitive: boolean;
+  /**
+   * The response keys actually in play for a given config, so the setup screen
+   * and the session can state them instead of leaving the participant guessing.
+   */
+  keyHints?: (config: Config) => { key: string; label: string }[];
   run: (ctx: SessionContext) => Promise<RunResult>;
 }
 
