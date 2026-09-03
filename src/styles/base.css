@@ -467,7 +467,6 @@ table.data td.num {
   border: 1px solid var(--border);
   display: grid;
   place-items: center;
-  font-size: 1.8rem;
   color: #05080f;
   /* Only background-color changes on stimulus onset: no layout, no reflow, so
      the paint lands on the next frame predictably. */
@@ -475,6 +474,14 @@ table.data td.num {
 }
 
 .nb-cell.is-lit { border-color: transparent; }
+
+/* Sized from the cell rather than from the font, so a shape fills the same
+   fraction of a 2x2 cell as it does of a 4x4 one. */
+.nb-shape {
+  width: 52%;
+  aspect-ratio: 1;
+  fill: currentColor;
+}
 
 .nb-fixation {
   position: absolute;
