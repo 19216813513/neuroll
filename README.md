@@ -3,7 +3,15 @@
 脳力を測定し、向上させることに全振りした Web アプリ。
 設計の全体像は [PLAN.md](PLAN.md) を参照。
 
-現在の状態: **フェーズ 0 完了**（計測基盤 + 保存層 + 反応時間種目）
+現在の状態: **フェーズ 1 進行中**
+
+| | |
+|---|---|
+| 実装済みの種目 | N-back（位置・図形・音、2×2 / 3×3 / 4×4）/ シュルテ表 / 単純反応時間 |
+| 基盤 | 計測コア・IndexedDB 保存・設定 UI 自動生成・即リトライ・PWA |
+| フェーズ 1 の残り | タイピング、ハイスコア画面、進捗グラフ |
+
+フェーズの定義は [PLAN.md §14](PLAN.md) を参照。
 
 ## 開発
 
@@ -96,6 +104,10 @@ curl -sI https://neuroll.<subdomain>.workers.dev | grep -i x-robots-tag
 `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet` が返れば正常。
 返らない場合は `public/_headers` が `dist/` にコピーされていない。
 
+`<subdomain>` は自分のアカウントの workers.dev サブドメイン。`npm run deploy` の
+完了行に実 URL が出るほか、Cloudflare ダッシュボードの Workers & Pages → `neuroll`
+でも確認できる。
+
 `_headers` は配信されず Workers にパースされるだけなので、`/_headers` に
 アクセスすると（SPA フォールバックで）index.html が返る。これが正しい挙動。
 
@@ -103,12 +115,15 @@ curl -sI https://neuroll.<subdomain>.workers.dev | grep -i x-robots-tag
 
 ```
 src/
-  core/        計測基盤（時刻・スケジューラ・入力・乱数・端末プロファイル）
+  core/        計測基盤（時刻・スケジューラ・入力・乱数・端末プロファイル・音）
   stats/       統計（記述統計・信号検出理論・標準化）— ブラウザ API 非依存
   scores/      スコアバケット・妥当性チェック
-  store/       IndexedDB・エクスポート/インポート
+  store/       IndexedDB・エクスポート/インポート・設定の永続化
+  auth/        ローカル ULID の発行（PLAN §2.5。将来アカウントに差し替える箇所）
   exercises/   種目。追加時はここに 1 ディレクトリ + registry.ts に 1 行
+  ui/          種目に依存しない部品（設定フォームなど）
   app/         画面
+  styles/      CSS トークンとベーススタイル
 ```
 
 `core/` と `stats/` は種目に依存しない。`stats/` と各種目の `score.ts` は
