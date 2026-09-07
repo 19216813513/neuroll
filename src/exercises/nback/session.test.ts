@@ -37,6 +37,7 @@ interface Harness {
 function createHarness(
   root: HTMLElement,
   respond: (context: { litCellIndex: number | null; frame: number }) => string[],
+  start: "key" | "tap" = "key",
 ): Harness {
   let now = 0;
   let frame = 0;
@@ -91,8 +92,13 @@ function createHarness(
           settled = true;
         });
 
-      // The session waits for a keypress before the first trial.
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
+      // The session waits to be told the participant is ready. On a phone that
+      // signal can only be a tap, so the harness can send either one.
+      if (start === "tap") {
+        root.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+      } else {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
+      }
 
       // Bounded so a regression that hangs the loop fails the test instead of
       // hanging the suite.
@@ -253,6 +259,39 @@ describe("N-back session", () => {
     // The alphabet is actually being used, rather than the same path every trial.
     expect(drawn.size).toBeGreaterThan(2);
     for (const d of drawn) expect(d.startsWith("M")).toBe(true);
+  }, 30_000);
+
+  it("can be played start to finish without a keyboard", async () => {
+    // Not a cosmetic detail: with keys as the only input, a phone cannot get past
+    // the ready screen at all, let alone answer a trial.
+    const harness = createHarness(
+      root,
+      ({ litCellIndex }) => {
+        if (litCellIndex !== null) {
+          const button = root.querySelector('.nb-key[data-modality="position"]');
+          button?.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+        }
+        return [];
+      },
+      "tap",
+    );
+
+    const result = await harness.run(
+      config({ modalities: ["position"], n: 2, trials: 10, stimulusMs: 300, isiMs: 300 }),
+    );
+
+    expect(result.aborted).toBeFalsy();
+    expect(result.trials).toHaveLength(10);
+    // A tap has to be recorded as the same answer a key would have been, on the
+    // same trial and with a real reaction time attached.
+    const responded = result.trials.filter(
+      (t) => (t.response as Record<string, boolean>).position === true,
+    );
+    expect(responded.length).toBe(10);
+    for (const trial of responded) {
+      expect(trial.rtMs).not.toBeNull();
+      expect(Number.isFinite(trial.rtMs as number)).toBe(true);
+    }
   }, 30_000);
 
   it("leaves no key listeners or DOM behind when it finishes", async () => {

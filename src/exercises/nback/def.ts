@@ -98,6 +98,7 @@ export const nbackDef: ExerciseDef = {
     "「今の刺激は N 個前と同じか？」を毎回判断します。N=2 なら 2 個前との比較です（直前ではありません）。",
     "同じだと思ったときだけキーを押します。違うと思ったら何も押しません（押さないのが正解の回も多いです）。",
     "キーはモダリティごとに別です（位置 = A、音/文字 = L、色 = S、形 = K）。複数一致したらその分だけ押します。",
+    "スマホでは画面下のボタンをタップします。キーと同じ扱いなので、記録も同じ条件に入ります。",
     "最初の N 回は比較対象がないため採点されません。覚えるだけで OK です。",
     "Esc で中断できます。",
   ],
@@ -358,6 +359,26 @@ async function runNback(ctx: SessionContext): Promise<RunResult> {
     }
   }
 
+  // Pressed state per modality for the current trial. Reused across trials
+  // rather than reallocated, so the loop does not allocate while timing.
+  const pressed: Record<string, boolean> = {};
+  const pressedAt: Record<string, number> = {};
+  let presentedAt = 0;
+
+  /**
+   * The single place a response is recorded, whichever device produced it. A key
+   * and a tap on the matching button are the same answer, so they must be timed
+   * and de-duplicated the same way. `view` is assigned just below; this runs
+   * only once a trial is on screen, long after that.
+   */
+  const registerPress = (modality: Modality, at: number): void => {
+    // Only the first press per trial counts; the rest are the same decision.
+    if (pressed[modality]) return;
+    pressed[modality] = true;
+    pressedAt[modality] = at - presentedAt;
+    view.markPressed(modality);
+  };
+
   const view = buildView(ctx.root, {
     // With no positional stream there is nothing to place, so the grid collapses
     // to a single centred cell rather than lighting the top-left corner.
@@ -366,17 +387,12 @@ async function runNback(ctx: SessionContext): Promise<RunResult> {
     showFixation: config.showFixation as boolean,
     showAudioGlyph: showsAudioGlyph || (hasAudioStream && !audioEngine.ready),
     n,
+    onPress: registerPress,
   });
 
   const records: TrialRecord[] = [];
   const scoreTrials: NbackScoreTrial[] = [];
   const startedAt = performance.now();
-
-  // Pressed state per modality for the current trial. Reused across trials
-  // rather than reallocated, so the loop does not allocate while timing.
-  const pressed: Record<string, boolean> = {};
-  const pressedAt: Record<string, number> = {};
-  let presentedAt = 0;
 
   const keyToModality = new Map<string, Modality>();
   for (const modality of modalities) keyToModality.set(MODALITY_KEYS[modality], modality);
@@ -386,11 +402,7 @@ async function runNback(ctx: SessionContext): Promise<RunResult> {
     const modality = keyToModality.get(event.key.toLowerCase());
     if (!modality) return;
     event.preventDefault();
-    // Only the first press per trial counts; the rest are the same decision.
-    if (pressed[modality]) return;
-    pressed[modality] = true;
-    pressedAt[modality] = eventTime(event) - presentedAt;
-    view.markPressed(modality);
+    registerPress(modality, eventTime(event));
   };
 
   window.addEventListener("keydown", onKeyDown, { capture: true });
@@ -399,9 +411,9 @@ async function runNback(ctx: SessionContext): Promise<RunResult> {
     view.setMessage(
       `${n}-back`,
       modalities.map((m) => `${MODALITY_LABELS[m]} = ${MODALITY_KEYS[m].toUpperCase()}`).join("　"),
-      "キーを押して開始",
+      "キーを押すか画面をタップして開始",
     );
-    await waitForAnyKey(ctx.signal);
+    await waitForStart(ctx.signal);
     view.clearMessage();
     await delay(800, ctx.signal);
 
@@ -499,15 +511,31 @@ function firstFiniteRt(
   return null;
 }
 
-function waitForAnyKey(signal: AbortSignal): Promise<void> {
+/**
+ * Waits for the participant to say they are ready.
+ *
+ * A tap counts as well as a key: on a phone there is no key to press, and a
+ * session that cannot be started is not a session. Taps are read from the window
+ * for the same reason keys are — the exercise host is only as tall as its stage,
+ * so a tap in the margin around it would otherwise do nothing while the screen
+ * says to tap. A stray tap on a response button here is harmless: the loop calls
+ * `resetTrial` before the first stimulus, which clears anything registered.
+ */
+function waitForStart(signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const cleanup = (): void => {
-      window.removeEventListener("keydown", handler, { capture: true });
+      window.removeEventListener("keydown", onKeyDown, { capture: true });
+      window.removeEventListener("pointerdown", onPointerDown);
       signal.removeEventListener("abort", onAbort);
     };
-    const handler = (event: KeyboardEvent): void => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      // Escape belongs to the session shell quit handler, not to this gate.
       if (event.key === "Escape") return;
       event.preventDefault();
+      cleanup();
+      resolve();
+    };
+    const onPointerDown = (): void => {
       cleanup();
       resolve();
     };
@@ -515,7 +543,8 @@ function waitForAnyKey(signal: AbortSignal): Promise<void> {
       cleanup();
       reject(new AbortError());
     };
-    window.addEventListener("keydown", handler, { capture: true });
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    window.addEventListener("pointerdown", onPointerDown);
     signal.addEventListener("abort", onAbort, { once: true });
   });
 }
@@ -533,6 +562,8 @@ interface ViewOptions {
   showFixation: boolean;
   showAudioGlyph: boolean;
   n: number;
+  /** Called when a response button is tapped. Keys are handled by the caller. */
+  onPress: (modality: Modality, at: number) => void;
 }
 
 interface NbackView {
@@ -593,17 +624,24 @@ function buildView(root: HTMLElement, options: ViewOptions): NbackView {
   glyph.className = "nb-glyph";
   if (!options.showAudioGlyph) glyph.style.display = "none";
 
+  // Both the legend and, on a touchscreen, the only way to answer. One element
+  // serving both roles keeps the two devices from drifting apart: whatever the
+  // reminder says is exactly what the button does.
   const keys = document.createElement("div");
   keys.className = "nb-keys";
-  const keyEls = new Map<Modality, HTMLDivElement>();
+  const keyEls = new Map<Modality, HTMLButtonElement>();
   for (const modality of options.modalities) {
-    const key = document.createElement("div");
+    const key = document.createElement("button");
+    key.type = "button";
     key.className = "nb-key";
+    key.dataset.modality = modality;
+    // Kept out of the tab order: the session reads letter keys as responses, and
+    // a focused button would quietly turn Space into a second way to answer.
+    key.tabIndex = -1;
     const label =
       modality === "audio" && options.showAudioGlyph ? "音/文字" : MODALITY_LABELS[modality];
     // "位置 A" alone never says what A does. The rule is the hard part of this
     // task, so the reminder stays on screen for the whole session.
-    key.innerHTML = "";
     const kbd = document.createElement("kbd");
     kbd.textContent = MODALITY_KEYS[modality].toUpperCase();
     const text = document.createElement("span");
@@ -612,6 +650,20 @@ function buildView(root: HTMLElement, options: ViewOptions): NbackView {
     keys.append(key);
     keyEls.set(modality, key);
   }
+
+  // Delegated, and on pointerdown rather than click: the click that follows a tap
+  // arrives tens of milliseconds later, and that delay would land straight in the
+  // reaction time.
+  const onKeysPointerDown = (event: PointerEvent): void => {
+    const button = (event.target as HTMLElement).closest(".nb-key") as HTMLElement | null;
+    const modality = button?.dataset.modality as Modality | undefined;
+    if (!modality) return;
+    // Stops the synthesized click, the double-tap zoom, and the text selection a
+    // fast second tap would otherwise start.
+    event.preventDefault();
+    options.onPress(modality, eventTime(event));
+  };
+  keys.addEventListener("pointerdown", onKeysPointerDown);
 
   const message = document.createElement("div");
   message.className = "nb-message";
@@ -677,6 +729,7 @@ function buildView(root: HTMLElement, options: ViewOptions): NbackView {
       message.innerHTML = "";
     },
     dispose() {
+      keys.removeEventListener("pointerdown", onKeysPointerDown);
       root.innerHTML = "";
     },
   };

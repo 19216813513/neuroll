@@ -9,7 +9,7 @@
  */
 
 import { paintAndTimestamp } from "~/core/clock";
-import { onKey } from "~/core/input";
+import { eventTime, onKey } from "~/core/input";
 import { AbortError, delay } from "~/core/scheduler";
 import type { ExerciseDef, RunResult, SessionContext, TrialRecord } from "~/exercises/types";
 import { mean, median, quantile, stdDev } from "~/stats/descriptive";
@@ -27,9 +27,10 @@ export const reactionTimeDef: ExerciseDef = {
   name: "反応時間",
   blurb: "その日の覚醒度を測る基準線。訓練ではなく体調チェック用。",
   instructions: [
-    "画面の四角が青く光ったら、できるだけ速く Space を押します。",
+    "画面の四角が青く光ったら、できるだけ速く Space を押します。スマホでは四角をタップします。",
     "光るまでの待ち時間はランダムです。予測して早押しすると「フライング」となり、その試行はやり直しになります。",
-    "選択反応モードでは、光った側に対応する F または J を押します。",
+    "選択反応モードでは、光った側に対応する F または J を押します。タップの場合は光った側の四角を直接タップします。",
+    "タップ・クリックは物理キーより遅く出ます。スマホの記録は端末クラスが違うので別枠になりますが、PC でマウスクリックした分はキーの記録と同じ枠に入るので、比べるときは入力方法を揃えてください。",
     "最初の数回はウォームアップで、記録には含まれません。",
     "訓練種目ではありません。毎日これを測っておくと、他の種目のスコアが落ちたときに「実力不足」なのか「寝不足」なのかを切り分けられます。",
   ],
@@ -150,10 +151,10 @@ async function runReactionTime(ctx: SessionContext): Promise<RunResult> {
 
   try {
     view.setMessage(
-      mode === "simple" ? "合図が出たら Space" : "光った側の F または J",
-      "準備ができたらキーを押して開始",
+      mode === "simple" ? "合図が出たら Space かタップ" : "光った側の F / J か、光った四角をタップ",
+      "準備ができたらキーかタップで開始",
     );
-    await waitForAnyKey(ctx.signal);
+    await waitForStart(ctx.signal);
 
     const total = warmup + trialCount;
     for (let i = 0; i < total; i++) {
@@ -260,26 +261,36 @@ export function scoreReactionTime(
   return { metrics, primaryScore: metrics.medianRt };
 }
 
-/** Resolves true if a key was pressed before the wait elapsed (a false start). */
+/**
+ * Resolves true if the participant responded before the wait elapsed — a false
+ * start. A tap counts as much as a key: anticipating must never buy a fast time,
+ * whichever device is being used to anticipate with.
+ */
 function waitForStimulusWindow(waitMs: number, signal: AbortSignal): Promise<boolean> {
   return new Promise((resolve, reject) => {
     let settled = false;
-    const stopListening = onKey(() => {
+    const jumped = (): void => {
       if (settled) return;
       settled = true;
-      stopListening();
+      stop();
       resolve(true);
-    });
+    };
+    const stopKeys = onKey(jumped);
+    const stop = (): void => {
+      stopKeys();
+      window.removeEventListener("pointerdown", jumped);
+    };
+    window.addEventListener("pointerdown", jumped);
 
     delay(waitMs, signal)
       .then(() => {
         if (settled) return;
         settled = true;
-        stopListening();
+        stop();
         resolve(false);
       })
       .catch((error) => {
-        stopListening();
+        stop();
         reject(error);
       });
   });
@@ -291,20 +302,31 @@ interface RtResponse {
   correct: boolean;
 }
 
+/**
+ * Waits for the answer to one stimulus, from a key or from a tap.
+ *
+ * In choice mode a tap has to land on one of the two squares, since that is what
+ * carries the left/right decision the mode is measuring; a tap anywhere else is
+ * ignored rather than scored wrong, because missing the square is a slip of the
+ * thumb and not a wrong answer. Simple mode takes a tap anywhere.
+ */
 function waitForResponse(mode: Mode, index: number, signal: AbortSignal): Promise<RtResponse> {
   const accepted = mode === "choice" ? [...CHOICE_KEYS] : [" ", "spacebar"];
   const expected = mode === "choice" ? CHOICE_KEYS[index] : null;
 
   return new Promise((resolve, reject) => {
+    const finish = (response: RtResponse): void => {
+      stop();
+      signal.removeEventListener("abort", onAbort);
+      resolve(response);
+    };
     const onAbort = (): void => {
-      stopListening();
+      stop();
       reject(new AbortError());
     };
-    const stopListening = onKey(
+    const stopKeys = onKey(
       (response) => {
-        stopListening();
-        signal.removeEventListener("abort", onAbort);
-        resolve({
+        finish({
           at: response.at,
           key: response.key,
           correct: expected === null || response.key === expected,
@@ -312,21 +334,46 @@ function waitForResponse(mode: Mode, index: number, signal: AbortSignal): Promis
       },
       { accept: accepted },
     );
+    const onPointerDown = (event: PointerEvent): void => {
+      const target = (event.target as HTMLElement).closest(".rt-target") as HTMLElement | null;
+      const tapped = target ? Number(target.dataset.index) : null;
+      if (mode === "choice" && tapped === null) return;
+      // Stops the synthesized click and the double-tap zoom that would otherwise
+      // follow a fast second response.
+      event.preventDefault();
+      finish({
+        at: eventTime(event),
+        key: tapped === null ? "tap" : `tap:${tapped}`,
+        correct: expected === null || tapped === index,
+      });
+    };
+    const stop = (): void => {
+      stopKeys();
+      window.removeEventListener("pointerdown", onPointerDown);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
     signal.addEventListener("abort", onAbort, { once: true });
   });
 }
 
-function waitForAnyKey(signal: AbortSignal): Promise<void> {
+/** Opens the session on a key or a tap — a phone only has the second one. */
+function waitForStart(signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
+    const ready = (): void => {
+      stop();
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    };
     const onAbort = (): void => {
       stop();
       reject(new AbortError());
     };
-    const stop = onKey(() => {
-      stop();
-      signal.removeEventListener("abort", onAbort);
-      resolve();
-    });
+    const stopKeys = onKey(ready);
+    const stop = (): void => {
+      stopKeys();
+      window.removeEventListener("pointerdown", ready);
+    };
+    window.addEventListener("pointerdown", ready);
     signal.addEventListener("abort", onAbort, { once: true });
   });
 }
@@ -360,6 +407,9 @@ function buildView(root: HTMLElement, mode: Mode): RtView {
   const cells = (mode === "choice" ? [0, 1] : [0]).map((i) => {
     const cell = document.createElement("div");
     cell.className = "rt-target";
+    // Read back by the response handler: on touch the square itself carries the
+    // left/right answer that F and J carry on a keyboard.
+    cell.dataset.index = String(i);
     if (mode === "choice") cell.dataset.key = CHOICE_KEYS[i]?.toUpperCase();
     targets.append(cell);
     return cell;

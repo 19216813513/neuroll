@@ -307,6 +307,10 @@ kbd {
 .rt-target {
   width: 168px;
   height: 168px;
+  /* Also the response button on touch: no double-tap zoom, no text selection. */
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
   border-radius: var(--radius-lg);
   background: var(--bg-inset);
   border: 2px solid var(--border);
@@ -328,6 +332,22 @@ kbd {
 .rt-target.is-lit {
   background: var(--stimulus);
   border-color: var(--stimulus);
+}
+
+/* Two fixed 168px squares plus the gap overflow a 375px screen, and on touch they
+   are the response buttons rather than just the stimulus, so they stretch to the
+   width instead of being cropped. */
+@media (max-width: 700px) {
+  .rt-targets {
+    width: 100%;
+  }
+
+  .rt-target {
+    width: auto;
+    height: auto;
+    flex: 1 1 0;
+    aspect-ratio: 1;
+  }
 }
 
 .rt-message {
@@ -507,11 +527,31 @@ table.data td.num {
   border-radius: var(--radius);
   border: 1px solid var(--border-strong);
   color: var(--text-dim);
+  /* A response target: no double-tap zoom, and no text selection when the same
+     spot is hit twice in quick succession. */
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .nb-key.is-pressed {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* With no keyboard these stop being a legend and become the primary control, so
+   they take the full width and get thumb-sized. */
+@media (max-width: 700px) {
+  .nb-keys {
+    width: 100%;
+  }
+
+  .nb-key {
+    flex: 1 1 0;
+    min-height: 64px;
+    font-size: 1rem;
+    justify-content: center;
+  }
 }
 
 .nb-message { display: grid; gap: var(--s-2); }
