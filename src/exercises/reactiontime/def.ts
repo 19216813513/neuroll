@@ -9,7 +9,7 @@
  */
 
 import { paintAndTimestamp } from "~/core/clock";
-import { eventTime, onKey } from "~/core/input";
+import { onKey, onPointerDown, type PointerResponse, waitForStartSignal } from "~/core/input";
 import { AbortError, delay } from "~/core/scheduler";
 import type { ExerciseDef, RunResult, SessionContext, TrialRecord } from "~/exercises/types";
 import { mean, median, quantile, stdDev } from "~/stats/descriptive";
@@ -154,7 +154,7 @@ async function runReactionTime(ctx: SessionContext): Promise<RunResult> {
       mode === "simple" ? "合図が出たら Space かタップ" : "光った側の F / J か、光った四角をタップ",
       "準備ができたらキーかタップで開始",
     );
-    await waitForStart(ctx.signal);
+    await waitForStartSignal(ctx.signal);
 
     const total = warmup + trialCount;
     for (let i = 0; i < total; i++) {
@@ -178,7 +178,7 @@ async function runReactionTime(ctx: SessionContext): Promise<RunResult> {
       }
 
       const presentedAt = await paintAndTimestamp(() => view.show(index));
-      const response = await waitForResponse(mode, index, ctx.signal);
+      const response = await waitForResponse(mode, index, view, ctx.signal);
       const rtMs = response.at - presentedAt;
 
       view.hide();
@@ -276,11 +276,11 @@ function waitForStimulusWindow(waitMs: number, signal: AbortSignal): Promise<boo
       resolve(true);
     };
     const stopKeys = onKey(jumped);
+    const stopTaps = onPointerDown(window, jumped);
     const stop = (): void => {
       stopKeys();
-      window.removeEventListener("pointerdown", jumped);
+      stopTaps();
     };
-    window.addEventListener("pointerdown", jumped);
 
     delay(waitMs, signal)
       .then(() => {
@@ -303,14 +303,38 @@ interface RtResponse {
 }
 
 /**
- * Waits for the answer to one stimulus, from a key or from a tap.
+ * Turns a tap into an answer, or null when it does not answer this trial.
  *
- * In choice mode a tap has to land on one of the two squares, since that is what
- * carries the left/right decision the mode is measuring; a tap anywhere else is
- * ignored rather than scored wrong, because missing the square is a slip of the
- * thumb and not a wrong answer. Simple mode takes a tap anywhere.
+ * Choice mode needs the side, and only the squares carry it, so a tap that
+ * missed them both is a slip of the thumb rather than a wrong answer and is
+ * ignored. Simple mode asks whether the stimulus was noticed at all, so anywhere
+ * on the screen counts.
+ *
+ * Which square was hit is the view's business, not this function's: it owns the
+ * DOM it built.
  */
-function waitForResponse(mode: Mode, index: number, signal: AbortSignal): Promise<RtResponse> {
+function tapResponse(
+  pointer: PointerResponse,
+  mode: Mode,
+  index: number,
+  view: RtView,
+): RtResponse | null {
+  const tapped = view.targetAt(pointer.target);
+  if (mode === "choice" && tapped === null) return null;
+  return {
+    at: pointer.at,
+    key: tapped === null ? "tap" : `tap:${tapped}`,
+    correct: mode !== "choice" || tapped === index,
+  };
+}
+
+/** Waits for the answer to one stimulus, from a key or from a tap. */
+function waitForResponse(
+  mode: Mode,
+  index: number,
+  view: RtView,
+  signal: AbortSignal,
+): Promise<RtResponse> {
   const accepted = mode === "choice" ? [...CHOICE_KEYS] : [" ", "spacebar"];
   const expected = mode === "choice" ? CHOICE_KEYS[index] : null;
 
@@ -325,55 +349,22 @@ function waitForResponse(mode: Mode, index: number, signal: AbortSignal): Promis
       reject(new AbortError());
     };
     const stopKeys = onKey(
-      (response) => {
-        finish({
-          at: response.at,
-          key: response.key,
-          correct: expected === null || response.key === expected,
-        });
-      },
+      (key) =>
+        finish({ at: key.at, key: key.key, correct: expected === null || key.key === expected }),
       { accept: accepted },
     );
-    const onPointerDown = (event: PointerEvent): void => {
-      const target = (event.target as HTMLElement).closest(".rt-target") as HTMLElement | null;
-      const tapped = target ? Number(target.dataset.index) : null;
-      if (mode === "choice" && tapped === null) return;
+    const stopTaps = onPointerDown(window, (pointer) => {
+      const response = tapResponse(pointer, mode, index, view);
+      if (!response) return;
       // Stops the synthesized click and the double-tap zoom that would otherwise
       // follow a fast second response.
-      event.preventDefault();
-      finish({
-        at: eventTime(event),
-        key: tapped === null ? "tap" : `tap:${tapped}`,
-        correct: expected === null || tapped === index,
-      });
-    };
+      pointer.event.preventDefault();
+      finish(response);
+    });
     const stop = (): void => {
       stopKeys();
-      window.removeEventListener("pointerdown", onPointerDown);
+      stopTaps();
     };
-    window.addEventListener("pointerdown", onPointerDown);
-    signal.addEventListener("abort", onAbort, { once: true });
-  });
-}
-
-/** Opens the session on a key or a tap — a phone only has the second one. */
-function waitForStart(signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const ready = (): void => {
-      stop();
-      signal.removeEventListener("abort", onAbort);
-      resolve();
-    };
-    const onAbort = (): void => {
-      stop();
-      reject(new AbortError());
-    };
-    const stopKeys = onKey(ready);
-    const stop = (): void => {
-      stopKeys();
-      window.removeEventListener("pointerdown", ready);
-    };
-    window.addEventListener("pointerdown", ready);
     signal.addEventListener("abort", onAbort, { once: true });
   });
 }
@@ -383,6 +374,8 @@ interface RtView {
   hide(): void;
   reset(counter: string): void;
   setMessage(primary: string, secondary?: string): void;
+  /** Which square a tap landed on, or null when it missed them all. */
+  targetAt(target: EventTarget | null): number | null;
   dispose(): void;
 }
 
@@ -439,6 +432,10 @@ function buildView(root: HTMLElement, mode: Mode): RtView {
     setMessage(primary, secondary = "") {
       message.textContent = primary;
       hint.textContent = secondary;
+    },
+    targetAt(target) {
+      const index = cells.findIndex((cell) => target instanceof Node && cell.contains(target));
+      return index === -1 ? null : index;
     },
     dispose() {
       root.innerHTML = "";

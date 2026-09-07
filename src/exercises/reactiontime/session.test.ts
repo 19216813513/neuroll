@@ -38,6 +38,33 @@ function tap(element: Element): void {
 }
 
 /**
+ * Replaces rAF and `performance.now` with a clock the test advances itself.
+ * `tick` runs `beforeFrame` while the previous frame is still on screen, which is
+ * where a response belongs: the participant answers what they can currently see.
+ */
+function stubFrameClock(): { tick: (beforeFrame?: () => void) => void } {
+  let now = 0;
+  let callbacks: FrameRequestCallback[] = [];
+
+  vi.stubGlobal("performance", { now: () => now });
+  vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback): number => {
+    callbacks.push(cb);
+    return callbacks.length;
+  });
+  vi.stubGlobal("cancelAnimationFrame", () => {});
+
+  return {
+    tick(beforeFrame) {
+      const due = callbacks;
+      callbacks = [];
+      now += FRAME_MS;
+      beforeFrame?.();
+      for (const cb of due) cb(now);
+    },
+  };
+}
+
+/**
  * Runs a session to completion, tapping whenever the target is lit.
  *
  * Taps only while lit: a tap during the wait is a false start by design, and
@@ -50,16 +77,7 @@ async function runWithTaps(
   config: Config,
   where: "square" | "outside" = "square",
 ): Promise<RunResult> {
-  let now = 0;
-  let callbacks: FrameRequestCallback[] = [];
-
-  vi.stubGlobal("performance", { now: () => now });
-  vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback): number => {
-    callbacks.push(cb);
-    return callbacks.length;
-  });
-  vi.stubGlobal("cancelAnimationFrame", () => {});
-
+  const clock = stubFrameClock();
   const controller = new AbortController();
   let settled = false;
   const promise = reactionTimeDef
@@ -78,15 +96,12 @@ async function runWithTaps(
   // The ready screen. On a phone this tap is the only way past it.
   tap(root);
 
+  // Bounded so a regression that hangs the loop fails the test instead of the run.
   for (let i = 0; i < 200_000 && !settled; i++) {
-    const due = callbacks;
-    callbacks = [];
-    now += FRAME_MS;
-
-    const lit = root.querySelector(".rt-target.is-lit");
-    if (lit) tap(where === "square" ? lit : root);
-
-    for (const cb of due) cb(now);
+    clock.tick(() => {
+      const lit = root.querySelector(".rt-target.is-lit");
+      if (lit) tap(where === "square" ? lit : root);
+    });
     await Promise.resolve();
   }
 

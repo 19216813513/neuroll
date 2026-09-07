@@ -13,6 +13,7 @@
  */
 
 import { now } from "./clock";
+import { AbortError } from "./scheduler";
 
 /**
  * Extracts a `performance.now()`-comparable timestamp from a DOM event.
@@ -89,22 +90,73 @@ export interface PointerResponse {
   target: EventTarget | null;
   x: number;
   y: number;
+  /**
+   * The event itself, so a handler can `preventDefault` it. A tap that answers a
+   * trial has to suppress the synthesized click and the double-tap zoom, and a
+   * normalized copy of the event cannot do that.
+   */
+  event: PointerEvent;
 }
 
-/** Pointer equivalent of `onKey`, for grid-tapping exercises. */
+/**
+ * Pointer equivalent of `onKey`.
+ *
+ * Takes the window as well as an element: a response can be a tap anywhere on
+ * the screen, and an exercise host is only as tall as its own stage.
+ */
 export function onPointerDown(
-  element: HTMLElement,
+  target: HTMLElement | Window,
   handler: (response: PointerResponse) => void,
 ): () => void {
-  const listener = (event: PointerEvent): void => {
+  const listener = (event: Event): void => {
+    const pointer = event as PointerEvent;
     handler({
-      at: eventTime(event),
-      trusted: isTrusted(event),
-      target: event.target,
-      x: event.clientX,
-      y: event.clientY,
+      at: eventTime(pointer),
+      trusted: isTrusted(pointer),
+      target: pointer.target,
+      x: pointer.clientX,
+      y: pointer.clientY,
+      event: pointer,
     });
   };
-  element.addEventListener("pointerdown", listener);
-  return () => element.removeEventListener("pointerdown", listener);
+  target.addEventListener("pointerdown", listener);
+  return () => target.removeEventListener("pointerdown", listener);
+}
+
+/**
+ * Resolves when the participant signals they are ready to begin.
+ *
+ * Every exercise needs this and none of them should own it: a key on a desktop,
+ * a tap on a phone, and — because the exercise host is only as tall as its
+ * stage — a tap read from the window rather than from that host, so tapping the
+ * margin does something.
+ *
+ * Escape is deliberately not a start signal and is left un-prevented: it belongs
+ * to the session shell quit handler, and starting a session with the key that is
+ * supposed to leave it would be a trap.
+ */
+export function waitForStartSignal(signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const stop = (): void => {
+      window.removeEventListener("keydown", onKeyDown, { capture: true });
+      stopPointer();
+      signal.removeEventListener("abort", onAbort);
+    };
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") return;
+      event.preventDefault();
+      stop();
+      resolve();
+    };
+    const onAbort = (): void => {
+      stop();
+      reject(new AbortError());
+    };
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    const stopPointer = onPointerDown(window, () => {
+      stop();
+      resolve();
+    });
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
 }

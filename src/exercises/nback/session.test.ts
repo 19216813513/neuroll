@@ -33,6 +33,9 @@ interface Harness {
  * Replaces rAF and performance.now with a clock the test advances itself.
  * Frames are pumped from a macrotask loop so awaited promises interleave the way
  * they do in a browser.
+ *
+ * `start` picks how the ready screen is dismissed: `"key"` for a desktop run,
+ * `"tap"` to prove the session opens on a device that has no keyboard at all.
  */
 function createHarness(
   root: HTMLElement,

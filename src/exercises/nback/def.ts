@@ -12,7 +12,7 @@
 
 import { AUDIO_ALPHABET_SIZE, audioEngine } from "~/core/audio";
 import { paintAndTimestamp } from "~/core/clock";
-import { eventTime } from "~/core/input";
+import { eventTime, onPointerDown, waitForStartSignal } from "~/core/input";
 import { AbortError, delay } from "~/core/scheduler";
 import type {
   Config,
@@ -413,7 +413,7 @@ async function runNback(ctx: SessionContext): Promise<RunResult> {
       modalities.map((m) => `${MODALITY_LABELS[m]} = ${MODALITY_KEYS[m].toUpperCase()}`).join("　"),
       "キーを押すか画面をタップして開始",
     );
-    await waitForStart(ctx.signal);
+    await waitForStartSignal(ctx.signal);
     view.clearMessage();
     await delay(800, ctx.signal);
 
@@ -509,44 +509,6 @@ function firstFiniteRt(
     if (value !== null && value !== undefined && Number.isFinite(value)) return value;
   }
   return null;
-}
-
-/**
- * Waits for the participant to say they are ready.
- *
- * A tap counts as well as a key: on a phone there is no key to press, and a
- * session that cannot be started is not a session. Taps are read from the window
- * for the same reason keys are — the exercise host is only as tall as its stage,
- * so a tap in the margin around it would otherwise do nothing while the screen
- * says to tap. A stray tap on a response button here is harmless: the loop calls
- * `resetTrial` before the first stimulus, which clears anything registered.
- */
-function waitForStart(signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const cleanup = (): void => {
-      window.removeEventListener("keydown", onKeyDown, { capture: true });
-      window.removeEventListener("pointerdown", onPointerDown);
-      signal.removeEventListener("abort", onAbort);
-    };
-    const onKeyDown = (event: KeyboardEvent): void => {
-      // Escape belongs to the session shell quit handler, not to this gate.
-      if (event.key === "Escape") return;
-      event.preventDefault();
-      cleanup();
-      resolve();
-    };
-    const onPointerDown = (): void => {
-      cleanup();
-      resolve();
-    };
-    const onAbort = (): void => {
-      cleanup();
-      reject(new AbortError());
-    };
-    window.addEventListener("keydown", onKeyDown, { capture: true });
-    window.addEventListener("pointerdown", onPointerDown);
-    signal.addEventListener("abort", onAbort, { once: true });
-  });
 }
 
 /**
@@ -654,16 +616,15 @@ function buildView(root: HTMLElement, options: ViewOptions): NbackView {
   // Delegated, and on pointerdown rather than click: the click that follows a tap
   // arrives tens of milliseconds later, and that delay would land straight in the
   // reaction time.
-  const onKeysPointerDown = (event: PointerEvent): void => {
-    const button = (event.target as HTMLElement).closest(".nb-key") as HTMLElement | null;
+  const stopKeyTaps = onPointerDown(keys, (response) => {
+    const button = (response.target as HTMLElement).closest(".nb-key") as HTMLElement | null;
     const modality = button?.dataset.modality as Modality | undefined;
     if (!modality) return;
     // Stops the synthesized click, the double-tap zoom, and the text selection a
     // fast second tap would otherwise start.
-    event.preventDefault();
-    options.onPress(modality, eventTime(event));
-  };
-  keys.addEventListener("pointerdown", onKeysPointerDown);
+    response.event.preventDefault();
+    options.onPress(modality, response.at);
+  });
 
   const message = document.createElement("div");
   message.className = "nb-message";
@@ -729,7 +690,7 @@ function buildView(root: HTMLElement, options: ViewOptions): NbackView {
       message.innerHTML = "";
     },
     dispose() {
-      keys.removeEventListener("pointerdown", onKeysPointerDown);
+      stopKeyTaps();
       root.innerHTML = "";
     },
   };
