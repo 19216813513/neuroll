@@ -38,6 +38,37 @@ export const AUDIO_ALPHABET_SIZE = TONE_FREQUENCIES.length;
 
 const TONE_DURATION_S = 0.28;
 
+/**
+ * How long to wait for a suspended context to start before giving up on sound.
+ *
+ * `resume()` does not reject when the browser declines to start audio without a
+ * user gesture — it returns a promise that never settles. Awaiting that inside an
+ * exercise stops the session before it has drawn anything, and because it never
+ * reaches a point where the abort signal is observed, Escape cannot get out of it
+ * either: a blank screen with no way back. Bounding the wait turns a dead session
+ * into a silent one, which the exercises already know how to handle.
+ *
+ * `setTimeout` is the right tool here despite PLAN §4.1: this is setup, not
+ * stimulus timing, and being throttled to a second in a background tab is
+ * harmless when the deadline is measured in seconds.
+ */
+const RESUME_TIMEOUT_MS = 1500;
+
+/** Resumes the context, or returns anyway once the deadline passes. */
+async function resumeWithin(context: AudioContext, timeoutMs: number): Promise<void> {
+  let timer = 0;
+  try {
+    await Promise.race([
+      context.resume(),
+      new Promise<void>((resolve) => {
+        timer = window.setTimeout(resolve, timeoutMs);
+      }),
+    ]);
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 export class AudioEngine {
   private context: AudioContext | null = null;
   private buffers: AudioBuffer[] = [];
@@ -53,7 +84,11 @@ export class AudioEngine {
    */
   async init(): Promise<void> {
     if (this.context) {
-      if (this.context.state === "suspended") await this.context.resume();
+      // Kept rather than discarded on a timeout: a later session started from a
+      // real gesture can still bring this context up.
+      if (this.context.state === "suspended") {
+        await resumeWithin(this.context, RESUME_TIMEOUT_MS);
+      }
       return;
     }
 
@@ -69,7 +104,7 @@ export class AudioEngine {
 
     this.buffers = TONE_FREQUENCIES.map((frequency) => renderTone(context, frequency));
 
-    if (context.state === "suspended") await context.resume();
+    if (context.state === "suspended") await resumeWithin(context, RESUME_TIMEOUT_MS);
   }
 
   setVolume(volume0to1: number): void {
@@ -88,8 +123,16 @@ export class AudioEngine {
     source.start();
   }
 
+  /**
+   * Whether playing a tone will actually be heard.
+   *
+   * "Running", not merely "exists": a suspended context accepts `play()` and
+   * emits nothing, so treating it as ready would leave the participant with a
+   * stream they cannot hear and no on-screen glyph in its place — a dual n-back
+   * silently reduced to a single one, still scored as if both streams were there.
+   */
   get ready(): boolean {
-    return this.context !== null && this.buffers.length > 0;
+    return this.context?.state === "running" && this.buffers.length > 0;
   }
 
   close(): void {
