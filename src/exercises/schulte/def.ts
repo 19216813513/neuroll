@@ -11,7 +11,7 @@
  */
 
 import { paintAndTimestamp } from "~/core/clock";
-import { eventTime } from "~/core/input";
+import { eventTime, waitForStartSignal } from "~/core/input";
 import { AbortError } from "~/core/scheduler";
 import type { ExerciseDef, RunResult, SessionContext, TrialRecord } from "~/exercises/types";
 import { mean, stdDev } from "~/stats/descriptive";
@@ -204,8 +204,8 @@ async function runSchulte(ctx: SessionContext): Promise<RunResult> {
   let errors = 0;
 
   try {
-    view.setMessage("クリックで開始", "1 から順にできるだけ速く");
-    await view.waitForStart(ctx.signal);
+    view.setMessage("クリックかキーで開始", "1 から順にできるだけ速く");
+    await waitForStartSignal(ctx.signal);
 
     let layout = ctx.rng.shuffle(Array.from({ length: cellCount }, (_, i) => i + 1));
     let previousAt = await paintAndTimestamp(() => {
@@ -301,7 +301,6 @@ interface SchulteView {
   markDone(index: number): void;
   flashWrong(index: number): void;
   waitForTap(signal: AbortSignal): Promise<Tap>;
-  waitForStart(signal: AbortSignal): Promise<void>;
   setMessage(title: string, hint: string): void;
   clearMessage(): void;
   dispose(): void;
@@ -389,24 +388,6 @@ function buildView(root: HTMLElement, options: ViewOptions): SchulteView {
           signal.removeEventListener("abort", onAbort);
           resolve(tap);
         };
-        signal.addEventListener("abort", onAbort, { once: true });
-      });
-    },
-    waitForStart(signal) {
-      return new Promise<void>((resolve, reject) => {
-        const cleanup = (): void => {
-          stage.removeEventListener("pointerdown", onStart);
-          signal.removeEventListener("abort", onAbort);
-        };
-        const onStart = (): void => {
-          cleanup();
-          resolve();
-        };
-        const onAbort = (): void => {
-          cleanup();
-          reject(new AbortError());
-        };
-        stage.addEventListener("pointerdown", onStart, { once: true });
         signal.addEventListener("abort", onAbort, { once: true });
       });
     },

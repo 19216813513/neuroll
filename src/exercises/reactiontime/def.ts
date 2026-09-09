@@ -9,7 +9,7 @@
  */
 
 import { paintAndTimestamp } from "~/core/clock";
-import { onKey } from "~/core/input";
+import { onKey, onPointerDown, type PointerResponse, waitForStartSignal } from "~/core/input";
 import { AbortError, delay } from "~/core/scheduler";
 import type { ExerciseDef, RunResult, SessionContext, TrialRecord } from "~/exercises/types";
 import { mean, median, quantile, stdDev } from "~/stats/descriptive";
@@ -27,9 +27,10 @@ export const reactionTimeDef: ExerciseDef = {
   name: "反応時間",
   blurb: "その日の覚醒度を測る基準線。訓練ではなく体調チェック用。",
   instructions: [
-    "画面の四角が青く光ったら、できるだけ速く Space を押します。",
+    "画面の四角が青く光ったら、できるだけ速く Space を押します。スマホでは四角をタップします。",
     "光るまでの待ち時間はランダムです。予測して早押しすると「フライング」となり、その試行はやり直しになります。",
-    "選択反応モードでは、光った側に対応する F または J を押します。",
+    "選択反応モードでは、光った側に対応する F または J を押します。タップの場合は光った側の四角を直接タップします。",
+    "タップ・クリックは物理キーより遅く出ます。スマホの記録は端末クラスが違うので別枠になりますが、PC でマウスクリックした分はキーの記録と同じ枠に入るので、比べるときは入力方法を揃えてください。",
     "最初の数回はウォームアップで、記録には含まれません。",
     "訓練種目ではありません。毎日これを測っておくと、他の種目のスコアが落ちたときに「実力不足」なのか「寝不足」なのかを切り分けられます。",
   ],
@@ -150,10 +151,10 @@ async function runReactionTime(ctx: SessionContext): Promise<RunResult> {
 
   try {
     view.setMessage(
-      mode === "simple" ? "合図が出たら Space" : "光った側の F または J",
-      "準備ができたらキーを押して開始",
+      mode === "simple" ? "合図が出たら Space かタップ" : "光った側の F / J か、光った四角をタップ",
+      "準備ができたらキーかタップで開始",
     );
-    await waitForAnyKey(ctx.signal);
+    await waitForStartSignal(ctx.signal);
 
     const total = warmup + trialCount;
     for (let i = 0; i < total; i++) {
@@ -177,7 +178,7 @@ async function runReactionTime(ctx: SessionContext): Promise<RunResult> {
       }
 
       const presentedAt = await paintAndTimestamp(() => view.show(index));
-      const response = await waitForResponse(mode, index, ctx.signal);
+      const response = await waitForResponse(mode, index, view, ctx.signal);
       const rtMs = response.at - presentedAt;
 
       view.hide();
@@ -260,26 +261,36 @@ export function scoreReactionTime(
   return { metrics, primaryScore: metrics.medianRt };
 }
 
-/** Resolves true if a key was pressed before the wait elapsed (a false start). */
+/**
+ * Resolves true if the participant responded before the wait elapsed — a false
+ * start. A tap counts as much as a key: anticipating must never buy a fast time,
+ * whichever device is being used to anticipate with.
+ */
 function waitForStimulusWindow(waitMs: number, signal: AbortSignal): Promise<boolean> {
   return new Promise((resolve, reject) => {
     let settled = false;
-    const stopListening = onKey(() => {
+    const jumped = (): void => {
       if (settled) return;
       settled = true;
-      stopListening();
+      stop();
       resolve(true);
-    });
+    };
+    const stopKeys = onKey(jumped);
+    const stopTaps = onPointerDown(window, jumped);
+    const stop = (): void => {
+      stopKeys();
+      stopTaps();
+    };
 
     delay(waitMs, signal)
       .then(() => {
         if (settled) return;
         settled = true;
-        stopListening();
+        stop();
         resolve(false);
       })
       .catch((error) => {
-        stopListening();
+        stop();
         reject(error);
       });
   });
@@ -291,42 +302,69 @@ interface RtResponse {
   correct: boolean;
 }
 
-function waitForResponse(mode: Mode, index: number, signal: AbortSignal): Promise<RtResponse> {
+/**
+ * Turns a tap into an answer, or null when it does not answer this trial.
+ *
+ * Choice mode needs the side, and only the squares carry it, so a tap that
+ * missed them both is a slip of the thumb rather than a wrong answer and is
+ * ignored. Simple mode asks whether the stimulus was noticed at all, so anywhere
+ * on the screen counts.
+ *
+ * Which square was hit is the view's business, not this function's: it owns the
+ * DOM it built.
+ */
+function tapResponse(
+  pointer: PointerResponse,
+  mode: Mode,
+  index: number,
+  view: RtView,
+): RtResponse | null {
+  const tapped = view.targetAt(pointer.target);
+  if (mode === "choice" && tapped === null) return null;
+  return {
+    at: pointer.at,
+    key: tapped === null ? "tap" : `tap:${tapped}`,
+    correct: mode !== "choice" || tapped === index,
+  };
+}
+
+/** Waits for the answer to one stimulus, from a key or from a tap. */
+function waitForResponse(
+  mode: Mode,
+  index: number,
+  view: RtView,
+  signal: AbortSignal,
+): Promise<RtResponse> {
   const accepted = mode === "choice" ? [...CHOICE_KEYS] : [" ", "spacebar"];
   const expected = mode === "choice" ? CHOICE_KEYS[index] : null;
 
   return new Promise((resolve, reject) => {
-    const onAbort = (): void => {
-      stopListening();
-      reject(new AbortError());
-    };
-    const stopListening = onKey(
-      (response) => {
-        stopListening();
-        signal.removeEventListener("abort", onAbort);
-        resolve({
-          at: response.at,
-          key: response.key,
-          correct: expected === null || response.key === expected,
-        });
-      },
-      { accept: accepted },
-    );
-    signal.addEventListener("abort", onAbort, { once: true });
-  });
-}
-
-function waitForAnyKey(signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const onAbort = (): void => {
-      stop();
-      reject(new AbortError());
-    };
-    const stop = onKey(() => {
+    const finish = (response: RtResponse): void => {
       stop();
       signal.removeEventListener("abort", onAbort);
-      resolve();
+      resolve(response);
+    };
+    const onAbort = (): void => {
+      stop();
+      reject(new AbortError());
+    };
+    const stopKeys = onKey(
+      (key) =>
+        finish({ at: key.at, key: key.key, correct: expected === null || key.key === expected }),
+      { accept: accepted },
+    );
+    const stopTaps = onPointerDown(window, (pointer) => {
+      const response = tapResponse(pointer, mode, index, view);
+      if (!response) return;
+      // Stops the synthesized click and the double-tap zoom that would otherwise
+      // follow a fast second response.
+      pointer.event.preventDefault();
+      finish(response);
     });
+    const stop = (): void => {
+      stopKeys();
+      stopTaps();
+    };
     signal.addEventListener("abort", onAbort, { once: true });
   });
 }
@@ -336,6 +374,8 @@ interface RtView {
   hide(): void;
   reset(counter: string): void;
   setMessage(primary: string, secondary?: string): void;
+  /** Which square a tap landed on, or null when it missed them all. */
+  targetAt(target: EventTarget | null): number | null;
   dispose(): void;
 }
 
@@ -360,6 +400,9 @@ function buildView(root: HTMLElement, mode: Mode): RtView {
   const cells = (mode === "choice" ? [0, 1] : [0]).map((i) => {
     const cell = document.createElement("div");
     cell.className = "rt-target";
+    // Read back by the response handler: on touch the square itself carries the
+    // left/right answer that F and J carry on a keyboard.
+    cell.dataset.index = String(i);
     if (mode === "choice") cell.dataset.key = CHOICE_KEYS[i]?.toUpperCase();
     targets.append(cell);
     return cell;
@@ -389,6 +432,10 @@ function buildView(root: HTMLElement, mode: Mode): RtView {
     setMessage(primary, secondary = "") {
       message.textContent = primary;
       hint.textContent = secondary;
+    },
+    targetAt(target) {
+      const index = cells.findIndex((cell) => target instanceof Node && cell.contains(target));
+      return index === -1 ? null : index;
     },
     dispose() {
       root.innerHTML = "";
