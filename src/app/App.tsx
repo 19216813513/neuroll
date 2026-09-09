@@ -26,6 +26,33 @@ type Screen =
 export function App() {
   const [screen, setScreen] = useState<Screen>({ name: "home" });
   const [deviceProfile, setDeviceProfile] = useState<DeviceProfile | null>(null);
+  const [updatePending, setUpdatePending] = useState(false);
+
+  // A new service worker taking control means the precached build changed while
+  // this page was open: what is on screen is the previous release, and it will
+  // keep running until something reloads it. That is how a fixed bug can look
+  // unfixed for a whole session.
+  useEffect(() => {
+    const container = navigator.serviceWorker;
+    if (!container) return;
+    // A first visit goes from uncontrolled to controlled, which fires this event
+    // without any build having changed. Treating that as an update would bounce
+    // every new visitor through a reload they did not need.
+    const hadController = container.controller !== null;
+    const onControllerChange = (): void => {
+      if (hadController) setUpdatePending(true);
+    };
+    container.addEventListener("controllerchange", onControllerChange);
+    return () => container.removeEventListener("controllerchange", onControllerChange);
+  }, []);
+
+  // Reloaded only from the home screen. A reload during a session would throw
+  // away a run the participant has already performed, and one on the results
+  // screen would take the score away before it had been read — neither is worth
+  // being a version fresher.
+  useEffect(() => {
+    if (updatePending && screen.name === "home") window.location.reload();
+  }, [updatePending, screen.name]);
 
   // Measured once at startup. Sampling frames takes ~2s at 60Hz, so doing it
   // lazily would put that delay in front of the first session instead.

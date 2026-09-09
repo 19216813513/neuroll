@@ -78,12 +78,17 @@ export function Home({ deviceProfile, onStart, onConfigure }: Props) {
 
   return (
     <div class="app-shell">
+      {/* The version is not decoration. A precached build can keep serving after
+          a release, and scoring can change between releases, so "which build am
+          I looking at" has to be answerable from the screen — otherwise a stale
+          app and a broken one look identical. */}
       <header class="app-header">
         <h1 class="app-title">neuroll</h1>
         <span class="faint">
           {deviceProfile
             ? `${deviceProfile.refreshRateHz}Hz / ${deviceProfile.deviceClass}`
-            : "環境を計測中…"}
+            : "環境を計測中…"}{" "}
+          <span class="app-version">v{__APP_VERSION__}</span>
         </span>
       </header>
 
