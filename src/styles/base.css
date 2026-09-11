@@ -265,6 +265,15 @@ kbd {
   }
 }
 
+/* Dimmer than the device line beside it: needed when something looks wrong,
+   ignorable the rest of the time. */
+.app-version {
+  margin-left: var(--s-2);
+  opacity: 0.7;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
 .key-legend {
   margin-top: var(--s-5);
   padding-top: var(--s-4);
