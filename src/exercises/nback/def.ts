@@ -46,7 +46,40 @@ function asModalities(config: Config): Modality[] {
   );
 }
 
-const COLORS = ["#4da3ff", "#f87171", "#4ade80", "#fbbf24", "#c084fc", "#22d3ee"];
+/**
+ * The colour alphabet.
+ *
+ * Eight, to match the auditory stream and the shape set. Alphabet size is a
+ * difficulty control in its own right — a small one makes accidental n±1 matches
+ * common and blunts what the lure rate is for — so streams of different sizes
+ * are streams of different difficulty, and `dPrime_color` sitting beside
+ * `dPrime_shape` in the results would be putting two different tasks on one row.
+ *
+ * All eight stay bright, because the shape glyph is drawn over the cell in
+ * near-black and a dark fill would swallow it. That rules out the darker half of
+ * a colourblind-safe set such as Okabe-Ito; an eight-way colour judgement is
+ * hostile to colour vision deficiency in any case, which is why colour is one
+ * optional modality of four rather than a required one.
+ *
+ * The two added to the original six were picked by measuring rather than by eye,
+ * which is how the first attempt at this got caught: a pink sat 31 degrees of hue
+ * from the existing red at the same lightness. White crowds no hue at all, and
+ * lime fills the widest gap left on the wheel (amber to green). Against every
+ * other entry the tightest pair in the finished set is green/lime at dE 41,
+ * against the blue/purple pair at dE 42 that the original six already had — so
+ * going from six to eight costs essentially none of the separation. The first six
+ * keep their index.
+ */
+export const COLORS = [
+  "#4da3ff", // blue
+  "#f87171", // red
+  "#4ade80", // green
+  "#fbbf24", // amber
+  "#c084fc", // purple
+  "#22d3ee", // cyan
+  "#f1f5f9", // white
+  "#a3e635", // lime
+];
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 /**
@@ -63,10 +96,15 @@ const SVG_NS = "http://www.w3.org/2000/svg";
  * Chosen for distinctness at a glance rather than for variety: nothing here is
  * another entry mirrored or rotated (▼ against ▲ would be), because telling
  * those apart is perceptual work and not the memory load the exercise exists to
- * impose. The original six keep their index, so an old sequence still means
- * what it did.
+ * impose. The original six keep their index.
+ *
+ * Eight of them, to match the auditory and colour streams — see COLORS for why
+ * the sizes have to agree. Getting there meant dropping the two weakest
+ * distinctions rather than the two most recent: a hexagon reads as a circle at
+ * the size a grid cell gives it, and a ring differs from a circle only by having
+ * a hole, which is a judgement about fill rather than about form.
  */
-const SHAPES: readonly string[] = [
+export const SHAPES: readonly string[] = [
   // circle
   "M6 50A44 44 0 1 1 94 50A44 44 0 1 1 6 50Z",
   // square
@@ -79,12 +117,8 @@ const SHAPES: readonly string[] = [
   "M50 4L61.2 34.6L93.8 35.8L68.1 55.9L77 87.2L50 69L23 87.2L31.9 55.9L6.2 35.8L38.8 34.6Z",
   // plus
   "M35 6H65V35H94V65H65V94H35V65H6V35H35Z",
-  // ring — the inner circle is wound the other way, so the hole stays a hole
-  "M6 50A44 44 0 1 1 94 50A44 44 0 1 1 6 50ZM26 50A24 24 0 1 0 74 50A24 24 0 1 0 26 50Z",
   // half circle
   "M6 72A44 44 0 0 1 94 72Z",
-  // hexagon
-  "M96 50L73 89.8L27 89.8L4 50L27 10.2L73 10.2Z",
   // heart
   "M50 92C22 71 8 53 8 36A24 24 0 0 1 50 21A24 24 0 0 1 92 36C92 53 78 71 50 92Z",
 ];
