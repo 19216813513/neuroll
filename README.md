@@ -93,20 +93,26 @@ wrangler が拒否する。アカウントを変える場合はここを書き�
 npm run build && npx wrangler dev --port 8788 --local
 ```
 
+### 公開 URL
+
+| 種別 | URL |
+|---|---|
+| 本番 | https://neuroll.eisei13513.workers.dev |
+| ブランチプレビュー | `https://<ブランチ名をハイフン化>-neuroll.eisei13513.workers.dev` |
+
+ブランチプレビューは GitHub 連携ビルドが PR ごとに払い出す。URL は PR に
+Cloudflare の bot がコメントするので、そこから開くのが早い。
+
 ### デプロイ後に必ず確認すること
 
 クロール対策が効いているかは、ヘッダを見ないと分からない。
 
 ```bash
-curl -sI https://neuroll.<subdomain>.workers.dev | grep -i x-robots-tag
+curl -sI https://neuroll.eisei13513.workers.dev | grep -i x-robots-tag
 ```
 
 `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet` が返れば正常。
 返らない場合は `public/_headers` が `dist/` にコピーされていない。
-
-`<subdomain>` は自分のアカウントの workers.dev サブドメイン。`npm run deploy` の
-完了行に実 URL が出るほか、Cloudflare ダッシュボードの Workers & Pages → `neuroll`
-でも確認できる。
 
 `_headers` は配信されず Workers にパースされるだけなので、`/_headers` に
 アクセスすると（SPA フォールバックで）index.html が返る。これが正しい挙動。
