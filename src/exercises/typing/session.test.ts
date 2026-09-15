@@ -286,6 +286,49 @@ describe("typing session", () => {
     expect(result.metrics.words).toBe(4);
   }, 30_000);
 
+  it("scrolls by the distance within the text, not by where the text sits on screen", async () => {
+    // A layout bug that only a real browser produces, pinned here by faking the
+    // layout. `offsetTop` is measured from the nearest positioned ancestor, and
+    // the session shell is `position: fixed`, so every word reports a few hundred
+    // pixels until `.tp-text` has a transform of its own. Scrolling by that number
+    // threw the whole text out of the viewport on the very first space — the run
+    // jumped to unrelated words — and applying it then made `.tp-text` the
+    // offsetParent, so the next space measured 0 and threw it back.
+    const SCREEN_OFFSET = 347;
+    const LINE_HEIGHT = 42;
+    const WORDS_PER_LINE = 4;
+
+    let stubbed = false;
+    const transforms: string[] = [];
+    const harness = createHarness(root, () => {
+      const words = [...root.querySelectorAll(".tp-word")] as HTMLElement[];
+      if (!stubbed && words.length > 0) {
+        stubbed = true;
+        words.forEach((word, index) => {
+          Object.defineProperty(word, "offsetTop", {
+            configurable: true,
+            get: () => SCREEN_OFFSET + Math.floor(index / WORDS_PER_LINE) * LINE_HEIGHT,
+          });
+        });
+      }
+      const text = root.querySelector(".tp-text") as HTMLElement | null;
+      if (text) transforms.push(text.style.transform);
+      const key = nextKey(root);
+      return key === null ? [] : [key];
+    });
+
+    const result = await harness.run(config({ endMode: "words", wordCount: 9 }));
+
+    expect(result.metrics.words).toBe(9);
+    // The shared offset is not a scroll distance and must never be used as one.
+    expect(transforms).not.toContain(`translateY(-${SCREEN_OFFSET}px)`);
+    for (const transform of transforms) {
+      expect(transform).not.toContain(String(SCREEN_OFFSET));
+    }
+    // Wrapping onto the second line still scrolls, by exactly one line.
+    expect(transforms).toContain(`translateY(-${LINE_HEIGHT}px)`);
+  }, 30_000);
+
   it("leaves no key listeners or DOM behind when it finishes", async () => {
     const added: string[] = [];
     const removed: string[] = [];

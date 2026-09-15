@@ -551,8 +551,21 @@ function buildView(root: HTMLElement, options: ViewOptions): TypingView {
 
     scrollTo(wordIndex) {
       const wordEl = wordEls[wordIndex];
-      if (!wordEl) return;
-      const top = wordEl.offsetTop;
+      const firstEl = wordEls[0];
+      if (!wordEl || !firstEl) return;
+
+      // Measured against the first word rather than read absolutely. `offsetTop`
+      // is relative to the nearest *positioned* ancestor, and which element that
+      // is changes underneath this code: the session shell is `position: fixed`,
+      // so until `.tp-text` has a transform of its own the offset is the distance
+      // from the top of the screen — a few hundred pixels — and scrolling by it
+      // threw the text right out of the viewport on the first space. Applying the
+      // transform then made `.tp-text` the offsetParent, so the next space
+      // measured 0 and threw it back. Two sibling words always share whatever
+      // ancestor that is, so their difference is the distance within the text and
+      // nothing else.
+      const top = wordEl.offsetTop - firstEl.offsetTop;
+
       // Only when the active word has actually wrapped onto a new line. Scrolling
       // on every word would make the text creep under the caret continuously.
       if (offsetTop === top) return;
