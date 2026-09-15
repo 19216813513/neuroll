@@ -10,11 +10,12 @@ import { nbackDef } from "./nback/def";
 import { reactionTimeDef } from "./reactiontime/def";
 import { schulteDef } from "./schulte/def";
 import type { CognitiveDomain, ExerciseDef } from "./types";
+import { typingDef } from "./typing/def";
 
-// Order is the order shown on the home screen: the two training exercises
-// first, with the reaction-time baseline last since it is a measurement rather
-// than a drill.
-export const exercises: ExerciseDef[] = [nbackDef, schulteDef, reactionTimeDef];
+// Order is the order shown on the home screen: the training exercises first,
+// with the reaction-time baseline last since it is a measurement rather than a
+// drill.
+export const exercises: ExerciseDef[] = [nbackDef, schulteDef, typingDef, reactionTimeDef];
 
 export const exerciseById = (id: string): ExerciseDef | undefined =>
   exercises.find((exercise) => exercise.id === id);

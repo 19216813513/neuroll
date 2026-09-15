@@ -617,6 +617,108 @@ table.data td.num {
 .sc-title { font-size: 1.4rem; }
 .sc-hint { color: var(--text-dim); font-size: 0.9rem; }
 
+/* ---- typing ---- */
+
+.tp-stage {
+  display: grid;
+  gap: var(--s-4);
+  justify-items: center;
+  /* An absolute width, not a percentage: the exercise host is sized by its
+     content, so a percentage would have nothing to resolve against and the
+     stage would sit against the left edge instead of centring. */
+  width: min(720px, 92vw);
+  text-align: center;
+}
+
+.tp-status {
+  font-family: var(--font-mono);
+  font-size: 2rem;
+  color: var(--accent);
+  min-height: 1.2em;
+}
+
+/* A fixed window onto the text. The line count is a setting, so the height is
+   derived from it rather than from however much text happens to exist. */
+.tp-viewport {
+  --tp-line: 2.6rem;
+  width: 100%;
+  height: calc(var(--tp-line) * var(--tp-lines));
+  overflow: hidden;
+}
+
+.tp-text {
+  display: flex;
+  flex-wrap: wrap;
+  /* The column gap is the space between words: it is the character the
+     participant actually types to separate them. */
+  gap: 0 0.6ch;
+  justify-content: flex-start;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  line-height: var(--tp-line);
+  /* Untyped text is dim so the caret and the typed text carry the eye. */
+  color: var(--text-faint);
+  /* Deliberately not animated. A caret that eases into position is a caret that
+     misreports where the next keystroke will land. */
+  transition: none;
+}
+
+.tp-word {
+  position: relative;
+  white-space: nowrap;
+}
+
+/* The word in hand, one step brighter than the text ahead of it. */
+.tp-word.is-active { color: var(--text-dim); }
+
+.tp-char { display: inline-block; }
+.tp-char.is-correct { color: var(--text); }
+.tp-char.is-wrong { color: var(--bad); }
+/* Left unfilled in a word that has already been committed — a skipped letter,
+   which costs exactly as much as a wrong one. */
+.tp-char.is-missing { color: var(--bad); opacity: 0.55; }
+
+/* The caret is drawn on the character it sits on, so it needs no position
+   measurement and cannot drift out of sync with the text. */
+.tp-text.is-caret-block .tp-char.is-caret {
+  background: var(--accent);
+  color: var(--bg);
+  border-radius: 2px;
+}
+.tp-text.is-caret-underline .tp-char.is-caret { box-shadow: inset 0 -2px 0 var(--accent); }
+.tp-text.is-caret-bar .tp-char.is-caret { box-shadow: inset 2px 0 0 var(--accent); }
+
+/* A fully typed word waiting for its space has no character left to mark, so the
+   caret moves to the word's trailing edge. Absolute, so it cannot reflow the
+   line it is sitting on. */
+.tp-word.is-caret-end::after {
+  content: "";
+  position: absolute;
+  right: -2px;
+  bottom: 0.2em;
+  background: var(--accent);
+}
+.tp-text.is-caret-block .tp-word.is-caret-end::after { width: 1ch; height: 1em; opacity: 0.7; }
+.tp-text.is-caret-underline .tp-word.is-caret-end::after { width: 1ch; height: 2px; }
+.tp-text.is-caret-bar .tp-word.is-caret-end::after { width: 2px; height: 1em; }
+
+/* Reserves its line whether or not it has anything to say: a warning that
+   appears mid-run must not push the text up under the caret. */
+.tp-warning {
+  min-height: 1.2em;
+  color: var(--warn);
+  font-size: 0.9rem;
+}
+
+.tp-message { display: grid; gap: var(--s-2); }
+.tp-title { font-size: 1.4rem; }
+.tp-hint { color: var(--text-dim); font-size: 0.9rem; }
+
+@media (max-width: 700px) {
+  .tp-text { font-size: 1.1rem; }
+}
+
 /* ---- setup & settings ---- */
 
 .section-title {
@@ -749,5 +851,207 @@ button.big {
   * {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+/* ---- high scores ---- */
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--s-4);
+  margin-top: var(--s-3);
+}
+
+.filter {
+  display: grid;
+  gap: var(--s-1);
+  align-content: start;
+}
+
+.filter-label {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+.filter select {
+  font: inherit;
+  color: inherit;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: var(--s-2);
+  width: 100%;
+}
+
+/* The checkbox is one item in the same grid as the dropdowns, so it needs to
+   sit on the row the labels leave for a control rather than at the top. */
+.filter-check {
+  grid-auto-flow: column;
+  justify-content: start;
+  align-items: center;
+  align-content: end;
+  gap: var(--s-2);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.filter-check input {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+}
+
+.score-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.score-table th {
+  text-align: left;
+  font-weight: 500;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.score-table td {
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.score-table tr:last-child td {
+  border-bottom: none;
+}
+
+.score-rank {
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  width: 3ch;
+}
+
+.score-value,
+.score-axis {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+}
+
+/* An invalid run is shown only when asked for, and has to stay visibly apart
+   from the records it is not competing with. */
+.score-table tr.is-invalid td {
+  opacity: 0.5;
+}
+
+.score-flag {
+  margin-left: var(--s-2);
+  font-size: 0.75rem;
+  color: var(--bad);
+  border: 1px solid var(--bad);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+.score-value .pb-badge {
+  margin-left: var(--s-2);
+}
+
+/* ---- charts ---- */
+
+.chart {
+  display: grid;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}
+
+.chart-svg {
+  width: 100%;
+  height: auto;
+  /* Without this the pointer only registers over the drawn strokes, so the
+     hover readout would appear and vanish between data points. */
+  touch-action: none;
+}
+
+.chart-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.chart-tick {
+  fill: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.chart-line {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+}
+
+/* The smoothed line is the one to read, so it is the one that carries the
+   accent colour and the weight; the raw series stays behind it as texture. */
+.chart-average {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+
+.chart-point {
+  fill: var(--text-dim);
+}
+
+.chart-point.is-hovered {
+  fill: var(--accent);
+}
+
+.chart-crosshair {
+  stroke: var(--accent);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.6;
+}
+
+/* Reserves its line so the card does not resize as the pointer enters and
+   leaves the plot. */
+.chart-readout {
+  display: flex;
+  gap: var(--s-3);
+  align-items: baseline;
+  min-height: 1.6em;
+  font-size: 0.9rem;
+}
+
+.chart-readout-value {
+  font-family: var(--font-mono);
+  font-size: 1.2rem;
+  color: var(--accent);
+}
+
+/* The SVG scales uniformly with its container, so on a phone everything inside
+   it shrinks by roughly half — including the axis labels, which stop being
+   readable at around 6px. Sizes are in viewBox units, so enlarging them here is
+   what keeps the rendered result the same size it is on a desktop. Measuring the
+   container instead would be exact, but it puts a layout read and a resize
+   listener in the render path for a difference nobody can see. */
+@media (max-width: 700px) {
+  .chart-tick {
+    font-size: 22px;
+  }
+
+  .chart-line {
+    stroke-width: 3;
+  }
+
+  .chart-average {
+    stroke-width: 5;
+  }
+
+  .chart-point {
+    r: 5;
   }
 }

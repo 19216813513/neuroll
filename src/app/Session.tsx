@@ -31,6 +31,7 @@ import { SCHEMA_VERSION } from "~/store/types";
 const PRIMARY_SETTING: Record<string, string> = {
   nback: "n",
   schulte: "order",
+  typing: "endMode",
   reactiontime: "mode",
 };
 

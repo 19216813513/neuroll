@@ -3,13 +3,14 @@
 脳力を測定し、向上させることに全振りした Web アプリ。
 設計の全体像は [PLAN.md](PLAN.md) を参照。
 
-現在の状態: **フェーズ 1 進行中**
+現在の状態: **フェーズ 1 完了**
 
 | | |
 |---|---|
-| 実装済みの種目 | N-back（位置・図形・音、2×2 / 3×3 / 4×4）/ シュルテ表 / 単純反応時間 |
+| 種目 | N-back（位置・図形・音、2×2 / 3×3 / 4×4）/ シュルテ表 / タイピング（英単語）/ 単純反応時間 |
+| 画面 | ホーム・設定・セッション・結果・ハイスコア（条件フィルタ）・進捗（学習曲線） |
 | 基盤 | 計測コア・IndexedDB 保存・設定 UI 自動生成・即リトライ・PWA |
-| フェーズ 1 の残り | タイピング、ハイスコア画面、進捗グラフ |
+| フェーズ 2 以降 | ピボット表・バケット一覧（PLAN §7.2 ビュー2/3）、neuroll スコアとドメインレーダー、追加種目 |
 
 フェーズの定義は [PLAN.md §14](PLAN.md) を参照。
 
@@ -93,20 +94,35 @@ wrangler が拒否する。アカウントを変える場合はここを書き�
 npm run build && npx wrangler dev --port 8788 --local
 ```
 
+### 公開 URL
+
+| 種別 | URL |
+|---|---|
+| 本番 | https://neuroll.eisei13513.workers.dev |
+| ブランチプレビュー | `https://<ブランチ名をハイフン化>-neuroll.eisei13513.workers.dev` |
+
+ブランチプレビューは GitHub 連携ビルドが PR ごとに払い出す。URL は PR に
+Cloudflare の bot がコメントするので、そこから開くのが早い。
+
 ### デプロイ後に必ず確認すること
 
 クロール対策が効いているかは、ヘッダを見ないと分からない。
 
 ```bash
-curl -sI https://neuroll.<subdomain>.workers.dev | grep -i x-robots-tag
+curl -sI https://neuroll.eisei13513.workers.dev | grep -i x-robots-tag
+```
+
+PowerShell には `grep` が無く、`curl` は 5.1 では `Invoke-WebRequest` の
+エイリアスで `-sI` を受け取らない。実体を明示して `Select-String` に渡す:
+
+```powershell
+curl.exe -sI https://neuroll.eisei13513.workers.dev | Select-String x-robots-tag
 ```
 
 `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet` が返れば正常。
 返らない場合は `public/_headers` が `dist/` にコピーされていない。
 
-`<subdomain>` は自分のアカウントの workers.dev サブドメイン。`npm run deploy` の
-完了行に実 URL が出るほか、Cloudflare ダッシュボードの Workers & Pages → `neuroll`
-でも確認できる。
+2026-09-15 時点の本番で確認済み。
 
 `_headers` は配信されず Workers にパースされるだけなので、`/_headers` に
 アクセスすると（SPA フォールバックで）index.html が返る。これが正しい挙動。
@@ -121,7 +137,7 @@ src/
   store/       IndexedDB・エクスポート/インポート・設定の永続化
   auth/        ローカル ULID の発行（PLAN §2.5。将来アカウントに差し替える箇所）
   exercises/   種目。追加時はここに 1 ディレクトリ + registry.ts に 1 行
-  ui/          種目に依存しない部品（設定フォームなど）
+  ui/          種目に依存しない部品（設定フォーム・グラフ・表示整形）
   app/         画面
   styles/      CSS トークンとベーススタイル
 ```
