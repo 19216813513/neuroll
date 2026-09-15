@@ -13,7 +13,9 @@ import { withDefaults } from "~/exercises/types";
 import { loadConfig, saveConfig } from "~/store/settings";
 import type { Run } from "~/store/types";
 import { ExerciseSetup } from "./ExerciseSetup";
+import { HighScores } from "./HighScores";
 import { Home } from "./Home";
+import { Progress } from "./Progress";
 import { Results } from "./Results";
 import { Session } from "./Session";
 
@@ -21,7 +23,9 @@ type Screen =
   | { name: "home" }
   | { name: "setup"; def: ExerciseDef; config: Config }
   | { name: "session"; def: ExerciseDef; config: Config }
-  | { name: "results"; def: ExerciseDef; config: Config; run: Run };
+  | { name: "results"; def: ExerciseDef; config: Config; run: Run }
+  | { name: "highscores" }
+  | { name: "progress" };
 
 export function App() {
   const [screen, setScreen] = useState<Screen>({ name: "home" });
@@ -131,6 +135,14 @@ export function App() {
     );
   }
 
+  if (screen.name === "highscores") {
+    return <HighScores onHome={goHome} />;
+  }
+
+  if (screen.name === "progress") {
+    return <Progress onHome={goHome} />;
+  }
+
   if (screen.name === "results") {
     return (
       <Results
@@ -148,6 +160,8 @@ export function App() {
       deviceProfile={deviceProfile}
       onStart={(def) => void startExercise(def)}
       onConfigure={(def) => void configureExercise(def)}
+      onHighScores={() => setScreen({ name: "highscores" })}
+      onProgress={() => setScreen({ name: "progress" })}
     />
   );
 }

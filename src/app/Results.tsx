@@ -16,6 +16,7 @@ import { linearSlope } from "~/stats/descriptive";
 import { computeIndex } from "~/stats/zscore";
 import { isPersonalBest, queryRuns, summariseBucket } from "~/store/runs";
 import type { Run } from "~/store/types";
+import { formatMetric, trendArrow } from "~/ui/format";
 
 interface Props {
   def: ExerciseDef;
@@ -23,11 +24,6 @@ interface Props {
   onRetry: () => void;
   onHome: () => void;
   onReconfigure: () => void;
-}
-
-function formatMetric(value: number | undefined, precision = 0): string {
-  if (value === undefined || !Number.isFinite(value)) return "—";
-  return value.toFixed(precision);
 }
 
 export function Results({ def, run, onRetry, onHome, onReconfigure }: Props) {
@@ -184,10 +180,4 @@ export function Results({ def, run, onRetry, onHome, onReconfigure }: Props) {
       </div>
     </div>
   );
-}
-
-function trendArrow(slope: number, higherIsBetter: boolean): string {
-  const directed = higherIsBetter ? slope : -slope;
-  if (Math.abs(directed) < 1e-6) return "→";
-  return directed > 0 ? "↗ 改善" : "↘ 低下";
 }

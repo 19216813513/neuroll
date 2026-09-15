@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { nbackDef } from "~/exercises/nback/def";
 import type { Config, ExerciseDef } from "~/exercises/types";
-import { computeBucket, describeBucket, isWithinTolerance, stableHash } from "./bucket";
+import {
+  computeBucket,
+  describeBucket,
+  distinguishLabels,
+  formatSettingValue,
+  isWithinTolerance,
+  stableHash,
+} from "./bucket";
 
 const def: ExerciseDef = {
   id: "test",
@@ -243,5 +251,78 @@ describe("isWithinTolerance", () => {
 
   it("ignores cosmetic differences", () => {
     expect(isWithinTolerance(def, base, { ...base, volume: 0, theme: "light" })).toBe(true);
+  });
+});
+
+describe("records missing a setting", () => {
+  // Not hypothetical: N-back gained `gridSize` after records already existed, so
+  // every older run has a config without it.
+  const olderRun = { modalities: ["position"], n: 2 };
+
+  it("describes the missing setting by its default instead of printing undefined", () => {
+    const summary = describeBucket(nbackDef, olderRun);
+
+    expect(summary).not.toContain("undefined");
+    expect(summary).not.toContain("NaN");
+  });
+
+  it("formats a missing value as the default", () => {
+    const gridSize = nbackDef.settings.find((s) => s.key === "gridSize");
+    expect(formatSettingValue(gridSize as never, undefined)).toBe(
+      formatSettingValue(gridSize as never, (gridSize as { default: unknown }).default),
+    );
+  });
+});
+
+describe("distinguishLabels", () => {
+  const at = (n: number): Config => ({
+    modalities: ["position"],
+    n,
+    trials: 20,
+    isiMs: 2500,
+    stimulusMs: 500,
+    targetRate: 25,
+    lureRate: 0,
+    gridSize: "3",
+  });
+
+  it("names only the setting that differs", () => {
+    // The whole point of the control is telling the options apart; repeating the
+    // eighty characters they share defeats it.
+    const labels = distinguishLabels(nbackDef, [at(1), at(2), at(3)]);
+
+    expect(labels).toEqual(["N 1", "N 2", "N 3"]);
+  });
+
+  it("names every differing setting when more than one varies", () => {
+    const labels = distinguishLabels(nbackDef, [at(2), { ...at(3), isiMs: 2000 }]);
+
+    expect(labels[0]).toContain("N 2");
+    expect(labels[0]).toContain("刺激間間隔 2500ms");
+    expect(labels[1]).toContain("N 3");
+    expect(labels[1]).toContain("刺激間間隔 2000ms");
+  });
+
+  it("keeps labels distinct when a differing setting is off in one config", () => {
+    // summariseDifficulty is right to leave an unset flag unsaid, but a picker
+    // built that way would show two options with the same label.
+    const labels = distinguishLabels(nbackDef, [at(2), { ...at(2), gridSize: "2" }]);
+
+    expect(new Set(labels).size).toBe(2);
+  });
+
+  it("falls back to the full description for a single config", () => {
+    const labels = distinguishLabels(nbackDef, [at(2)]);
+
+    expect(labels[0]).toBe(describeBucket(nbackDef, at(2)));
+  });
+
+  it("falls back to the full description when nothing differs", () => {
+    // Identical settings mean the configs are separated by something outside
+    // them, and the caller has to add that itself.
+    const labels = distinguishLabels(nbackDef, [at(2), at(2)]);
+
+    expect(labels[0]).toBe(labels[1]);
+    expect(labels[0]).toBe(describeBucket(nbackDef, at(2)));
   });
 });

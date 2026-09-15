@@ -19,9 +19,11 @@ interface Props {
   deviceProfile: DeviceProfile | null;
   onStart: (def: ExerciseDef) => void;
   onConfigure: (def: ExerciseDef) => void;
+  onHighScores: () => void;
+  onProgress: () => void;
 }
 
-export function Home({ deviceProfile, onStart, onConfigure }: Props) {
+export function Home({ deviceProfile, onStart, onConfigure, onHighScores, onProgress }: Props) {
   const [runsByExercise, setRunsByExercise] = useState<Map<string, Run[]>>(new Map());
   const [message, setMessage] = useState<string | null>(null);
 
@@ -93,6 +95,18 @@ export function Home({ deviceProfile, onStart, onConfigure }: Props) {
       </header>
 
       {message && <div class="banner">{message}</div>}
+
+      {/* Above the tiles rather than below them: the reason to look at a score is
+          to decide what to train next, which is a decision made before starting a
+          session, not after scrolling past every exercise. */}
+      <div class="row" style="margin-bottom: var(--s-5)">
+        <button type="button" onClick={onHighScores}>
+          ハイスコア
+        </button>
+        <button type="button" onClick={onProgress}>
+          進捗
+        </button>
+      </div>
 
       <div class="tile-grid">
         {exercises.map((def) => {

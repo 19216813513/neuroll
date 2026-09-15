@@ -46,6 +46,61 @@ function normalizeValue(setting: SettingDef, value: unknown): unknown {
   }
 }
 
+/**
+ * Canonical string form of one setting's value.
+ *
+ * The same normalisation the bucket hash uses, so "these two runs were played at
+ * the same N" is decided identically wherever it is asked — grouping a high-score
+ * table by a setting must not disagree with which bucket a run was filed under.
+ */
+export function settingValueKey(setting: SettingDef, value: unknown): string {
+  return JSON.stringify(normalizeValue(setting, value));
+}
+
+/**
+ * What a record's config says for a setting, falling back to the default.
+ *
+ * A run stored before a setting existed has no value for it — which is not
+ * hypothetical, since N-back gained `gridSize` after records had already been
+ * made. Rendering that gap literally produces "グリッド undefined" in every
+ * condition summary the run appears in. The default is the right stand-in
+ * because it is what that run was actually played at: the code had no other
+ * value to use either.
+ *
+ * Display only. `normalizeValue` above is deliberately not routed through this,
+ * because it feeds the bucket hash and every stored bucket id depends on it
+ * staying byte-for-byte what it has always been.
+ */
+function storedValue(setting: SettingDef, value: unknown): unknown {
+  return value === undefined ? setting.default : value;
+}
+
+/**
+ * One setting's value as a person reads it.
+ *
+ * Unlike `summariseDifficulty`, this never omits anything: a filter row has to
+ * render a value for every option it offers, including the `false` of a boolean
+ * that the condition chips are right to leave unsaid.
+ */
+export function formatSettingValue(setting: SettingDef, raw: unknown): string {
+  const value = storedValue(setting, raw);
+  switch (setting.kind) {
+    case "bool":
+      return value === true ? "あり" : "なし";
+    case "enum":
+      return setting.options.find((o) => o.value === value)?.label ?? String(value);
+    case "multi": {
+      const list = Array.isArray(value) ? value.map(String) : [];
+      if (list.length === 0) return "なし";
+      return list.map((v) => setting.options.find((o) => o.value === v)?.label ?? v).join("+");
+    }
+    case "key":
+      return String(value).toUpperCase();
+    default:
+      return `${value}${setting.unit ?? ""}`;
+  }
+}
+
 /** The difficulty-relevant subset of a config, canonically ordered. */
 export function difficultyProjection(def: ExerciseDef, config: Config): [string, unknown][] {
   return def.settings
@@ -128,7 +183,7 @@ export function summariseDifficulty(def: ExerciseDef, config: Config): Difficult
     // description skips it: difficultyProjection must keep every key, or every
     // stored bucket id would change.
     if (setting.visibleWhen && !setting.visibleWhen(config)) continue;
-    const value = config[setting.key];
+    const value = storedValue(setting, config[setting.key]);
 
     if (setting.kind === "bool") {
       // A disabled flag is not worth the space; only mention it when it is on.
@@ -192,4 +247,37 @@ export function isWithinTolerance(def: ExerciseDef, a: Config, b: Config): boole
     }
   }
   return true;
+}
+
+/**
+ * Labels for a set of configs that name only what differs between them.
+ *
+ * A bucket picker listing five conditions that are identical apart from N should
+ * read "N 1", "N 2", "N 3" — not five copies of an eighty-character description
+ * whose one differing character is somewhere in the middle. The point of the
+ * control is to tell the options apart, and a label that repeats what every
+ * option shares does the opposite.
+ *
+ * Every varying setting is printed for every config, including a boolean that
+ * happens to be off in one of them: dropping it there would leave two options
+ * with the same label, which is the failure this exists to prevent.
+ */
+export function distinguishLabels(def: ExerciseDef, configs: readonly Config[]): string[] {
+  if (configs.length <= 1) return configs.map((config) => describeBucket(def, config));
+
+  const varying = def.settings.filter((setting) => {
+    if (setting.affects !== "difficulty") return false;
+    const seen = new Set(configs.map((config) => settingValueKey(setting, config[setting.key])));
+    return seen.size > 1;
+  });
+
+  // Nothing differs in the settings — the configs are separated by something
+  // outside them, such as the device class, and the caller has to say so.
+  if (varying.length === 0) return configs.map((config) => describeBucket(def, config));
+
+  return configs.map((config) =>
+    varying
+      .map((setting) => `${setting.label} ${formatSettingValue(setting, config[setting.key])}`)
+      .join(" / "),
+  );
 }
