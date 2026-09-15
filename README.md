@@ -111,8 +111,17 @@ Cloudflare の bot がコメントするので、そこから開くのが早い�
 curl -sI https://neuroll.eisei13513.workers.dev | grep -i x-robots-tag
 ```
 
+PowerShell には `grep` が無く、`curl` は 5.1 では `Invoke-WebRequest` の
+エイリアスで `-sI` を受け取らない。実体を明示して `Select-String` に渡す:
+
+```powershell
+curl.exe -sI https://neuroll.eisei13513.workers.dev | Select-String x-robots-tag
+```
+
 `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet` が返れば正常。
 返らない場合は `public/_headers` が `dist/` にコピーされていない。
+
+2026-09-15 時点の本番で確認済み。
 
 `_headers` は配信されず Workers にパースされるだけなので、`/_headers` に
 アクセスすると（SPA フォールバックで）index.html が返る。これが正しい挙動。
